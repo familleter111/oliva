@@ -1,7 +1,7 @@
 # Oliva
 
 Application de restaurant : une carte publique sur `/`, la commande depuis la table, deux espaces pour le personnel de salle et une administration complète sous `/admin`.
-Next.js (App Router), TypeScript, Tailwind. Toutes les données métier sont enregistrées dans un classeur Excel local, sans base de données externe.
+Next.js (App Router), TypeScript, Tailwind. Toutes les données métier tiennent dans un classeur Excel, enregistré sur le disque du serveur ou, pour un hébergement sans disque, dans une base PostgreSQL sous la même forme.
 
 ## Démarrage rapide
 
@@ -39,11 +39,12 @@ Il n'existe aucun mot de passe par défaut, et aucune commande ne réinitialise 
 | `npm run setup` | Crée `.env.local` s'il est absent |
 | `npm run admin:init` | Crée le premier administrateur à partir des variables d'environnement |
 | `npm run demo:seed` | Ajoute la carte de démonstration dans un stockage vide |
-| `npm run storage:verifier` | Contrôle le classeur sans rien écrire : lecture, schéma, identifiants, relations |
+| `npm run storage:verifier` | Contrôle l'état enregistré sans rien écrire : lecture, schéma, identifiants, relations |
+| `npm run base:verifier` | Contrôle la connexion à la base et au dépôt Blob, sans rien écrire |
 | `npm run storage:restaurer -- <fichier.xlsx>` | Remet en place un classeur, application arrêtée |
 | `npm run i18n:verifier` | Liste les textes de l'interface absents du dictionnaire anglais |
 | `npm run typecheck` | Vérification TypeScript |
-| `npm test` | Tests unitaires et d'intégration du stockage (67) |
+| `npm test` | Tests unitaires et d'intégration du stockage (87) |
 | `npm run test:e2e` | Tests HTTP sur le serveur de production (114), après `npm run build` |
 | `npm run test:ui` | Parcours dans Chrome, audit d'accessibilité, traduction et débordements, après `npm run build` |
 
@@ -56,6 +57,8 @@ Les trois suites de tests travaillent dans `tests/.tmp/` et ne touchent jamais �
 | --- | --- |
 | `OLIVA_SECRET` | Secret technique, 32 caractères minimum. Signe les jetons de session et la protection CSRF. |
 | `OLIVA_STORAGE_DIR` | Dossier de stockage privé. Par défaut `./storage`. Refusé s'il se trouve sous `public/`. |
+| `DATABASE_URL` | Base PostgreSQL. Renseignée, elle remplace le classeur sur disque. `POSTGRES_URL` et `OLIVA_DATABASE_URL` sont acceptées aussi. |
+| `BLOB_READ_WRITE_TOKEN` | Dépôt Vercel Blob pour les images, les sauvegardes et les archives. Fourni par l'hébergeur. |
 | `OLIVA_PUBLIC_URL` | URL publique, utilisée pour les QR codes et les liens d'invitation. |
 | `OLIVA_ADMIN_EMAIL`, `OLIVA_ADMIN_PASSWORD`, `OLIVA_ADMIN_NAME` | Lues uniquement par `npm run admin:init`. |
 | `OLIVA_COOKIE_SECURE` | `false` uniquement pour tester un build de production en HTTP local. |
@@ -106,7 +109,22 @@ Le dossier est hors de `public/` et aucune route ne sert un fichier `.xlsx`. Les
 
 Conventions du classeur : montants en centimes entiers, dates au format ISO en texte, identifiants stables, listes en JSON. Les mots de passe n'y figurent que sous forme d'empreintes scrypt, les jetons sous forme d'empreintes HMAC.
 
-Mise à niveau : un classeur créé par une version précédente est lu tel quel. Les feuilles ajoutées depuis (les demandes des clients en version 2, les additions de table en version 3) sont considérées comme vides, puis créées à la prochaine écriture. Le fichier n'est réécrit qu'au moment d'une vraie sauvegarde, et aucune donnée existante n'est modifiée.
+Mise à niveau : un enregistrement créé par une version précédente est lu tel quel. Les feuilles ajoutées depuis (les demandes des clients en version 2, les additions de table en version 3) sont considérées comme vides, puis créées à la prochaine écriture. Le fichier n'est réécrit qu'au moment d'une vraie sauvegarde, et aucune donnée existante n'est modifiée.
+
+### Les deux stockages
+
+Le modèle de données ne change pas d'un stockage à l'autre : les mêmes 43 feuilles, les mêmes colonnes, les mêmes contrôles.
+
+| | Disque | Base de données |
+| --- | --- | --- |
+| Déclenché par | configuration par défaut | `DATABASE_URL` renseignée |
+| État | `storage/data/oliva.xlsx` | une ligne de la table `oliva_etat` |
+| Version précédente | `oliva.precedent.xlsx` | colonne `precedent` de la même ligne |
+| Écritures concurrentes | verrou de fichier, une seule instance | comparaison de révision, plusieurs serveurs acceptés |
+| Images et sauvegardes | `storage/media`, `storage/backups` | dépôt Blob aux mêmes chemins |
+| Rafraîchissement en direct | bus en mémoire | bus en mémoire et relecture de la révision toutes les 4 secondes |
+
+La table est créée au premier démarrage et mise à niveau sans rien perdre. Les exports, les imports et les sauvegardes restent des fichiers `.xlsx` dans les deux cas.
 
 ### Déroulement d'une écriture
 
@@ -122,12 +140,14 @@ Toute modification passe par `transaction()` dans `src/lib/server/storage.ts` :
 8. copie de l'ancien classeur vers `oliva.precedent.xlsx`, puis remplacement atomique ;
 9. libération du verrou, et seulement alors réponse de succès.
 
+En base, les étapes 6 à 8 deviennent une seule transaction SQL : l'écriture n'est acceptée que si la révision lue au départ n'a pas bougé, le contenu enregistré est relu et comparé avant la validation, et la version précédente est conservée dans la même ligne. Si un autre serveur est passé entre-temps, le travail est refait sur l'état frais plutôt qu'appliqué à l'aveugle.
+
 Si une étape échoue, le classeur en place n'est pas modifié et l'appelant reçoit une erreur. Aucun succès n'est annoncé avant l'enregistrement effectif.
 
 ### Garde-fous
 
-- Une seule instance peut écrire. Une seconde instance qui démarre sur le même dossier est refusée tant que la première est vivante.
-- Un classeur illisible n'est jamais remplacé par un classeur vide : l'application s'arrête sur une erreur explicite et vous oriente vers `oliva.precedent.xlsx` ou une sauvegarde.
+- Sur disque, une seule instance peut écrire : une seconde instance démarrée sur le même dossier est refusée tant que la première est vivante. En base, plusieurs serveurs peuvent écrire, et chaque écriture est acceptée seulement si personne n'a modifié l'état entre-temps.
+- Un enregistrement illisible n'est jamais remplacé par un enregistrement vide : l'application s'arrête sur une erreur explicite et vous oriente vers la version précédente ou une sauvegarde.
 - Un classeur vide n'est créé que lors de la toute première initialisation d'un dossier vierge.
 - Une sauvegarde automatique est prise au plus une fois par heure lors d'une écriture, les 24 dernières sont conservées.
 - Les exports traitent les textes saisis comme du texte : une cellule qui commence par `=`, `+`, `-` ou `@` est neutralisée.
@@ -140,8 +160,8 @@ Ce stockage convient à un restaurant, pas à une plateforme.
 - Chaque écriture réécrit le classeur entier : environ 20 écritures par seconde mesurées sur un poste de développement avec la carte de démonstration. Le débit baisse quand le classeur grossit.
 - Les écritures sont traitées l'une après l'autre. Les lectures utilisent une copie en mémoire.
 - Visez quelques milliers de lignes par feuille. L'historique est archivé automatiquement au-delà de 5 000 lignes.
-- Un seul processus Node. Pas de montée en charge horizontale, pas de mode cluster.
-- Si l'activité dépasse ces ordres de grandeur, il faudra migrer vers une vraie base de données. Le service de stockage est le seul point à remplacer.
+- Sur disque, un seul processus Node, sans montée en charge horizontale. En base, plusieurs serveurs sont possibles, mais chaque écriture réécrit l'état complet : la limite de débit reste la même.
+- Si l'activité dépasse ces ordres de grandeur, il faudra découper l'état en vraies tables. `src/lib/server/store/` est le seul point à remplacer.
 
 ## Sécurité
 
@@ -233,9 +253,7 @@ Oliva a besoin d'**un seul serveur Node avec un disque persistant**.
 
 Compatible : un serveur privé virtuel, une machine dédiée, ou une plateforme de conteneurs avec volume persistant et une seule instance (Railway, Render, Fly.io avec un volume, par exemple).
 
-Non compatible : les plateformes sans serveur ou à système de fichiers éphémère (Vercel, Netlify, fonctions Lambda), ainsi que tout déploiement à plusieurs instances. Les données y seraient perdues ou corrompues.
-
-Sur ces plateformes, l'application ne se lance pas et l'explique : le dossier de stockage ne peut pas être créé, et aucun classeur vide n'est écrit pour ne rien laisser croire. La cause exacte est lisible sur `/api/sante`, qui sert aussi de sonde d'état à l'hébergeur.
+Sur une plateforme sans serveur (Vercel, Netlify, fonctions Lambda), le disque est en lecture seule et recréé à chaque requête : il faut alors une base et un dépôt de fichiers, voir plus bas. Sans eux, l'application refuse de démarrer et l'explique, plutôt que d'écrire un classeur vide qui disparaîtrait à la requête suivante. La cause exacte est lisible sur `/api/sante`, qui sert aussi de sonde d'état à l'hébergeur.
 
 ### Avec Docker
 
@@ -261,6 +279,33 @@ Deux descripteurs prêts à l'emploi, tous deux fondés sur le `Dockerfile` :
 Dans les deux cas : une seule instance, un disque monté sur `/data`, et `/api/sante` comme sonde d'état. Le premier administrateur se crée ensuite une seule fois, dans la console de la plateforme : `npm run admin:init`, avec `OLIVA_ADMIN_EMAIL` et `OLIVA_ADMIN_PASSWORD` définis. La commande ne touche à rien si un administrateur existe déjà.
 
 Un disque persistant est une option payante chez Render, et le volume Fly.io est facturé au gigaoctet. C'est le prix d'un stockage qui survit aux redémarrages.
+
+### Sur Vercel, avec une base de données
+
+Il n'y a pas de disque, donc les deux services suivants sont nécessaires, tous deux créés depuis l'onglet Storage du projet :
+
+1. **Postgres (Neon)**, connecté au projet. Vercel ajoute seul `DATABASE_URL`.
+2. **Blob Store**, connecté au même projet, pour les images, les sauvegardes et les archives. Vercel ajoute seul `BLOB_READ_WRITE_TOKEN`.
+
+Ajoutez ensuite `OLIVA_SECRET` et `OLIVA_PUBLIC_URL` dans les variables du projet, puis déployez.
+
+Le premier administrateur se crée depuis votre poste, une seule fois, en pointant la base de production :
+
+```bash
+# dans .env.local, le temps de la commande
+DATABASE_URL=postgres://...            # copié depuis Vercel
+OLIVA_ADMIN_EMAIL=vous@exemple.fr
+OLIVA_ADMIN_PASSWORD=un mot de passe d'au moins 12 caractères
+
+npm run base:verifier   # connexion, table, dépôt Blob : aucun écrit
+npm run admin:init      # ne fait rien si un administrateur existe déjà
+```
+
+Retirez ensuite ces lignes de `.env.local`. Points à connaître :
+
+- Le rafraîchissement en direct relit la révision toutes les 4 secondes, puisque les serveurs ne partagent pas de mémoire. Un flux coupé par la plateforme est rouvert seul par le navigateur.
+- Chaque écriture transporte l'état complet. C'est tenable pour un restaurant, pas pour un catalogue de grande taille.
+- Les sauvegardes et les exports restent des fichiers `.xlsx`, déposés dans le Blob et téléchargeables depuis l'administration.
 
 ### Sans Docker
 
@@ -296,7 +341,7 @@ L'ancien classeur est conservé à côté, rien n'est supprimé.
 
 ## Tests
 
-- `npm test` : stockage (persistance après redémarrage, écritures concurrentes, panne disque sans faux succès, classeur corrompu jamais remplacé, seconde instance refusée), authentification et suspension, publication, panier partagé, parcours client d'une table (accueil sans fuite, instructions, demandes, statuts selon les droits, fermeture de session, mise à niveau d'un classeur de la version précédente), import et export, sauvegardes.
+- `npm test` : stockage (persistance après redémarrage, écritures concurrentes, panne disque sans faux succès, classeur corrompu jamais remplacé, seconde instance refusée), forme JSON de la base (aller-retour fidèle, colonnes inconnues écartées, types faux refusés, mise à niveau d'un enregistrement ancien) et dépôt de fichiers, authentification et suspension, publication, panier partagé, parcours client d'une table (accueil sans fuite, instructions, demandes, statuts selon les droits, fermeture de session, mise à niveau d'un classeur de la version précédente), import et export, sauvegardes.
 - `npm run test:e2e` : accès public sans connexion, refus des pages et de l'API d'administration, classeur inaccessible par URL, CSRF, permissions, envois de fichiers, import invalide sans écrasement, données intactes après redémarrage du serveur, sécurité des tables (identifiant seul refusé, mauvais code, jeton inventé, origine étrangère, prix imposé par le serveur, double confirmation, session fermée, verrouillage des essais de code).
 - `npm run test:ui` : parcours de l'administration, parcours client complet avec deux convives et l'écran de service, le même parcours sur téléphone (coupure du réseau comprise), parcours de l'espace serveur et de l'espace responsable (portée du rôle, transfert de table, attribution d'une demande, clôture d'une session), traduction en anglais, audit axe-core (WCAG 2.1 A et AA) des pages et des états ouverts, absence de débordement de 360 à 1280 px. Variante : `OLIVA_UI_ONLY=client|serveur|responsable|traduction|debordements npm run test:ui` pour ne rejouer qu'une partie.
 

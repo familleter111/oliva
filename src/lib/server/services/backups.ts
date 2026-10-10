@@ -1,15 +1,15 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import fsp from "node:fs/promises";
-import path from "node:path";
 import { isActiveAdmin } from "../db-utils";
-import { ensureDir, paths } from "../env";
 import { AppError, conflit, introuvable, invalide } from "../errors";
 import { SHEETS, SHEET_LABEL, type AnyRow, type Db, type SheetName } from "../schema";
-import { exclusive, readDb, readWorkbookFile, transaction, type Actor } from "../storage";
-import { MEDIA_NAME } from "./media";
+import { bucket } from "../store/bucket";
+import { exclusive, readDb, readWorkbookBuffer, transaction, type Actor } from "../storage";
+import { encodeWorkbook } from "../workbook";
+import { MEDIA_NAME, mediaKey } from "./media";
 
 const BACKUP_ID = /^manuel-\d{8}-\d{6}-[a-f0-9]{4}$/;
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 /** Feuilles conservées lors d'une restauration : l'activité passée n'est jamais remplacée. */
 const KEPT: SheetName[] = ["HistoriqueActions", "Commandes", "LignesCommande", "OperationsIdempotentes", "SessionsPersonnel"];
 const SUMMARY: SheetName[] = ["Produits", "Categories", "Medias", "Utilisateurs", "Zones", "Tables"];
@@ -26,10 +26,15 @@ export interface BackupManifest {
   lignes: Record<string, number>;
 }
 
+/** Prefixe d'une sauvegarde dans le depot de fichiers. */
 function dirOf(id: string): string {
   if (!BACKUP_ID.test(id)) throw invalide("Identifiant de sauvegarde invalide.");
-  return path.join(paths.backups, id);
+  return `backups/${id}`;
 }
+
+export const backupWorkbookKey = (id: string) => `${dirOf(id)}/oliva.xlsx`;
+const manifestKey = (id: string) => `${dirOf(id)}/manifeste.json`;
+const backupMediaKey = (id: string, f: string) => `${dirOf(id)}/media/${f}`;
 
 const count = (db: Db) => Object.fromEntries(SUMMARY.map((s) => [SHEET_LABEL[s], db[s].length]));
 
@@ -37,21 +42,21 @@ const count = (db: Db) => Object.fromEntries(SUMMARY.map((s) => [SHEET_LABEL[s],
 export async function createBackup(actor: Actor, note = ""): Promise<BackupManifest> {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   const id = `manuel-${stamp}-${randomBytes(2).toString("hex")}`;
-  const dir = dirOf(id);
+  const depot = bucket();
   try {
     const manifest = await exclusive(async (db) => {
-      await ensureDir(path.join(dir, "media"));
-      await fsp.copyFile(paths.workbook, path.join(dir, "oliva.xlsx"));
+      // Le classeur est reecrit depuis l'etat fige sous verrou : meme contenu, quel que soit le stockage.
+      const buf = await encodeWorkbook(db);
+      await depot.put(backupWorkbookKey(id), buf, { ecraser: true, typeMime: XLSX_MIME });
       let medias = 0;
-      const files = await fsp.readdir(paths.media).catch(() => [] as string[]);
-      for (const f of files) {
+      for (const e of await depot.list("media").catch(() => [])) {
+        const f = e.cle.slice("media/".length);
         if (!MEDIA_NAME.test(f)) continue;
-        await fsp.copyFile(path.join(paths.media, f), path.join(dir, "media", f));
+        await depot.copy(mediaKey(f), backupMediaKey(id, f));
         medias++;
       }
-      const st = await fsp.stat(path.join(dir, "oliva.xlsx"));
-      const m: BackupManifest = { id, creeLe: new Date().toISOString(), auteur: actor.nom, note: note.slice(0, 80), revision: db._meta.revision, demo: db._meta.donneesDemo, tailleOctets: st.size, medias, lignes: count(db) };
-      await fsp.writeFile(path.join(dir, "manifeste.json"), JSON.stringify(m, null, 2));
+      const m: BackupManifest = { id, creeLe: new Date().toISOString(), auteur: actor.nom, note: note.slice(0, 80), revision: db._meta.revision, demo: db._meta.donneesDemo, tailleOctets: buf.length, medias, lignes: count(db) };
+      await depot.put(manifestKey(id), Buffer.from(JSON.stringify(m, null, 2)), { ecraser: true, typeMime: "application/json" });
       return m;
     });
     await transaction({ actor }, (_db, tx) => {
@@ -59,45 +64,63 @@ export async function createBackup(actor: Actor, note = ""): Promise<BackupManif
     });
     return manifest;
   } catch (e) {
-    await fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    await removeBackupFiles(id).catch(() => undefined);
     if (e instanceof AppError) throw e;
     throw new AppError("stockage", "La sauvegarde n'a pas pu être écrite sur le disque.", { cause: e });
   }
 }
 
 export async function listBackups(): Promise<{ manuelles: BackupManifest[]; automatiques: number; derniereAuto: string }> {
+  const depot = bucket();
   const manuelles: BackupManifest[] = [];
-  const names = await fsp.readdir(paths.backups).catch(() => [] as string[]);
-  for (const name of names) {
-    if (!BACKUP_ID.test(name)) continue;
+  for (const id of await backupIds()) {
+    const brut = await depot.get(manifestKey(id)).catch(() => null);
+    if (!brut) continue;
     try {
-      manuelles.push(JSON.parse(await fsp.readFile(path.join(paths.backups, name, "manifeste.json"), "utf8")) as BackupManifest);
+      manuelles.push(JSON.parse(brut.toString("utf8")) as BackupManifest);
     } catch {
-      /* dossier incomplet : ignoré */
+      /* sauvegarde incomplete : ignoree */
     }
   }
   manuelles.sort((a, b) => b.creeLe.localeCompare(a.creeLe));
-  const auto = (await fsp.readdir(paths.autoBackups).catch(() => [] as string[])).filter((f) => f.endsWith(".xlsx")).sort();
-  let derniereAuto = "";
-  if (auto.length > 0) derniereAuto = (await fsp.stat(path.join(paths.autoBackups, auto[auto.length - 1]))).mtime.toISOString();
+  const auto = (await depot.list("backups/auto").catch(() => [])).filter((f) => f.cle.endsWith(".xlsx")).sort((a, b) => a.cle.localeCompare(b.cle));
+  const derniereAuto = auto.length ? new Date(auto[auto.length - 1].dateMs).toISOString() : "";
   return { manuelles, automatiques: auto.length, derniereAuto };
 }
 
-export function backupWorkbookPath(id: string): string {
-  return path.join(dirOf(id), "oliva.xlsx");
+/** Identifiants des sauvegardes manuelles presentes dans le depot. */
+async function backupIds(): Promise<string[]> {
+  const noms = await sousDossiers();
+  return noms.filter((n) => BACKUP_ID.test(n));
+}
+
+/** Sous-dossiers de `backups` : le depot ne liste que des fichiers, pas des dossiers. */
+async function sousDossiers(): Promise<string[]> {
+  if (bucket().nom === "disque") {
+    const fsp = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { storageRoot } = await import("../env");
+    const entrees = await fsp.readdir(path.join(storageRoot(), "backups"), { withFileTypes: true }).catch(() => []);
+    return entrees.filter((e) => e.isDirectory()).map((e) => e.name);
+  }
+  const { list } = await import("@vercel/blob");
+  const page = await list({ prefix: "backups/", mode: "folded", limit: 1000 });
+  return (page.folders ?? []).map((f) => f.slice("backups/".length).replace(/\/$/, ""));
 }
 
 async function load(id: string) {
-  const file = backupWorkbookPath(id);
-  try {
-    await fsp.access(file);
-  } catch {
-    throw introuvable("Sauvegarde introuvable.");
-  }
-  const db = await readWorkbookFile(file);
-  const available = new Set(await fsp.readdir(path.join(dirOf(id), "media")).catch(() => [] as string[]));
+  const depot = bucket();
+  const buf = await depot.get(backupWorkbookKey(id));
+  if (!buf) throw introuvable("Sauvegarde introuvable.");
+  const db = await readWorkbookBuffer(buf);
+  const available = new Set((await depot.list(`${dirOf(id)}/media`).catch(() => [])).map((e) => e.cle.split("/").pop()!));
   const missing = db.Medias.filter((m) => !available.has(m.fichier)).length;
   return { db, missing };
+}
+
+/** Efface tous les fichiers d'une sauvegarde. */
+async function removeBackupFiles(id: string): Promise<void> {
+  await bucket().removeAll(dirOf(id));
 }
 
 /** Vérifie une sauvegarde et décrit ce que sa restauration changerait. N'écrit rien. */
@@ -127,11 +150,13 @@ export async function restoreBackup(actor: Actor, id: string) {
 
   const safety = await createBackup(actor, "Avant restauration");
 
-  await ensureDir(paths.media);
-  for (const f of await fsp.readdir(path.join(dirOf(id), "media")).catch(() => [] as string[])) {
-    if (!MEDIA_NAME.test(f)) continue;
-    await fsp.copyFile(path.join(dirOf(id), "media", f), path.join(paths.media, f), fsp.constants.COPYFILE_EXCL).catch((e: NodeJS.ErrnoException) => {
-      if (e.code !== "EEXIST") throw new AppError("stockage", "Une image de la sauvegarde n'a pas pu être recopiée.", { cause: e });
+  const depot = bucket();
+  const deja = new Set((await depot.list("media").catch(() => [])).map((e) => e.cle.slice("media/".length)));
+  for (const e of await depot.list(`${dirOf(id)}/media`).catch(() => [])) {
+    const f = e.cle.split("/").pop()!;
+    if (!MEDIA_NAME.test(f) || deja.has(f)) continue;
+    await depot.copy(e.cle, mediaKey(f)).catch((cause) => {
+      throw new AppError("stockage", "Une image de la sauvegarde n'a pas pu être recopiée.", { cause });
     });
   }
 
@@ -155,13 +180,8 @@ export async function restoreBackup(actor: Actor, id: string) {
 }
 
 export async function deleteBackup(actor: Actor, id: string) {
-  const dir = dirOf(id);
-  try {
-    await fsp.access(dir);
-  } catch {
-    throw introuvable("Sauvegarde introuvable.");
-  }
-  await fsp.rm(dir, { recursive: true, force: true });
+  if (!(await bucket().get(manifestKey(id)))) throw introuvable("Sauvegarde introuvable.");
+  await removeBackupFiles(id);
   await transaction({ actor }, (_db, tx) => {
     tx.log({ action: "sauvegarde", libelle: "Sauvegarde supprimée", entite: "", entiteNom: id });
   });

@@ -1,11 +1,10 @@
 import "server-only";
-import fsp from "node:fs/promises";
 import { z } from "zod";
 import { labelOf, must, removeRow, usagesOf } from "../../db-utils";
 import { AppError, conflit, invalide } from "../../errors";
 import { allFiles } from "../../services/media-names";
 import { readDb, transaction } from "../../storage";
-import { MAX_UPLOAD_BYTES, MEDIA_CATEGORIES, MEDIA_NAME, collectGarbage, cropStored, mediaPath, removeStored, storeImage } from "../../services/media";
+import { MAX_UPLOAD_BYTES, MEDIA_CATEGORIES, MEDIA_NAME, collectGarbage, cropStored, readMedia, removeStored, storeImage } from "../../services/media";
 import { assertBodySize, cents, choix, collection, entier, hex, logUpdate, nom, ref, refs, txt, type Ctx, type Routes } from "../core";
 
 const PERM = "carte.modifier" as const;
@@ -262,7 +261,7 @@ export const catalogueRoutes: Routes = {
       if (!MEDIA_NAME.test(name)) throw invalide("Nom de fichier refusé.");
       const db = await readDb();
       if (!db.Medias.some((m) => allFiles(m.fichier).includes(name))) throw new AppError("introuvable", "Image introuvable.");
-      const data = await fsp.readFile(mediaPath(name)).catch(() => null);
+      const data = await readMedia(name).catch(() => null);
       if (!data) throw new AppError("introuvable", "Image introuvable sur le disque.");
       return new Response(new Uint8Array(data), { headers: { "Content-Type": "image/webp", "Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" } });
     },

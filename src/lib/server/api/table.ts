@@ -8,6 +8,7 @@ import { AppError, introuvable, isAppError } from "../errors";
 import { addCartLine, changeCartLine, confirmCart, joinSession, removeCartLine, sessionAccess, setLineInstructions } from "../services/cart";
 import { createRequest, leaveSession, tableState } from "../services/table";
 import { onCommit, readDb } from "../storage";
+import { watchOthers } from "./stream";
 import { entier, errorResponse, readJson, ref, refs, txt, zodProblem } from "./core";
 
 /**
@@ -107,9 +108,13 @@ const routes: Record<string, Route> = {
           const off = onCommit((e) => {
             if (e.topics.includes(topic)) send("maj");
           });
+          const stop = watchOthers((sujets) => {
+            if (sujets.includes(topic)) send("maj");
+          });
           const ping = setInterval(() => send("ping"), 25_000);
           cleanup = () => {
             off();
+            stop();
             clearInterval(ping);
           };
           req.signal.addEventListener("abort", () => {

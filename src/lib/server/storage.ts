@@ -12,6 +12,8 @@ import { changeMarker } from "./db-utils";
 import { initialDb } from "./defaults";
 import { RELATIONS, SHEETS, SHEET_LABEL, columnsOf, type AnyRow, type Db, type SheetName } from "./schema";
 import { decodeWorkbook, encodeWorkbook, fingerprint } from "./workbook";
+import { blobConfigured, bucket } from "./store/bucket";
+import { pgEcrire, pgFermer, pgInfo, pgLire, pgRemplacer, pgRevision, postgresConfigured } from "./store/postgres";
 
 /**
  * Service central de stockage.
@@ -161,6 +163,8 @@ function releaseLockSync(s: State) {
 }
 
 async function ensureInstanceLock(): Promise<void> {
+  // En base, deux serveurs peuvent écrire : chaque écriture vérifie la révision au lieu de poser un verrou.
+  if (postgresConfigured()) return;
   const s = state();
   const payload = () => JSON.stringify({ pid: process.pid, instanceId: s.instanceId, host: os.hostname(), at: Date.now() } satisfies LockFile);
 
@@ -227,6 +231,10 @@ function lockedError(l: LockFile) {
 /* ------------------------------------------------------------------ lecture */
 
 async function signature(): Promise<string | null> {
+  if (postgresConfigured()) {
+    const revision = await pgRevision();
+    return revision === null ? null : `pg:${revision}`;
+  }
   try {
     const st = await fsp.stat(paths.workbook);
     return `${st.mtimeMs}:${st.size}`;
@@ -257,48 +265,59 @@ async function hasEarlierData(): Promise<boolean> {
   return false;
 }
 
-/** À appeler sous mutex. Retourne la dernière version enregistrée sur disque. */
+/** À appeler sous mutex. Retourne la dernière version enregistrée. */
 async function loadLatest(): Promise<Db> {
   const s = state();
   const sig = await signature();
   if (sig !== null) {
     if (s.cache?.sig === sig) return s.cache.db;
-    let buf: Buffer;
-    try {
-      buf = await fsp.readFile(paths.workbook);
-    } catch (e) {
-      throw new AppError("stockage", "Le classeur de données est illisible. Vérifiez le disque.", { cause: e });
+    const db = postgresConfigured() ? await pgLire() : await lireClasseur();
+    if (db) {
+      try {
+        validateDb(db);
+      } catch (e) {
+        throw new AppError("stockage", `Classeur invalide : ${(e as Error).message} Aucune donnée n'a été modifiée.`, { cause: e });
+      }
+      s.cache = { db: deepFreeze(db), sig };
+      return db;
     }
-    const db = await decodeWorkbook(buf);
-    try {
-      validateDb(db);
-    } catch (e) {
-      throw new AppError("stockage", `Classeur invalide : ${(e as Error).message} Aucune donnée n'a été modifiée.`, { cause: e });
-    }
-    s.cache = { db: deepFreeze(db), sig };
-    return db;
   }
 
-  // Classeur absent : on ne crée un classeur vide que pour une toute première installation.
-  if (await hasEarlierData()) {
+  // Rien d'enregistré : on ne crée un état vide que pour une toute première installation.
+  if (!postgresConfigured() && (await hasEarlierData())) {
     throw new AppError(
       "stockage",
       "Le classeur principal est introuvable alors que ce stockage a déjà été initialisé. Il n'a pas été recréé pour ne rien écraser : restaurez `oliva.precedent.xlsx` ou une sauvegarde avec `npm run storage:restaurer`.",
     );
   }
-  // Un hébergement éphémère recréerait un classeur vide à chaque démarrage, et autant de fois qu'il y a d'instances.
-  const hote = ephemeralHost();
-  if (hote) {
-    throw new AppError(
-      "configuration",
-      `Oliva fonctionne sur ${hote}, dont le système de fichiers est éphémère et propre à chaque instance. Aucun classeur n'y a été créé : les données seraient perdues à la requête suivante. Hébergez l'application sur un serveur Node avec un disque persistant, puis pointez OLIVA_STORAGE_DIR sur ce disque.`,
-    );
+  if (!postgresConfigured()) {
+    // Un hébergement éphémère recréerait un classeur vide à chaque démarrage, et autant de fois qu'il y a d'instances.
+    const hote = ephemeralHost();
+    if (hote) {
+      throw new AppError(
+        "configuration",
+        `Oliva fonctionne sur ${hote}, dont le système de fichiers est éphémère et propre à chaque instance. Aucun classeur n'y a été créé : les données seraient perdues à la requête suivante. Hébergez l'application sur un serveur Node avec un disque persistant, puis pointez OLIVA_STORAGE_DIR sur ce disque.`,
+      );
+    }
   }
   await ensureInstanceLock();
   const db = initialDb(nowIso());
-  await commit(db);
-  await fsp.writeFile(paths.marker, `${nowIso()}\n`);
+  await commit(db, true);
+  if (!postgresConfigured()) await fsp.writeFile(paths.marker, `${nowIso()}
+`);
   return db;
+}
+
+/** Lecture du classeur sur disque. `null` si le fichier a disparu entre-temps. */
+async function lireClasseur(): Promise<Db | null> {
+  let buf: Buffer;
+  try {
+    buf = await fsp.readFile(paths.workbook);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new AppError("stockage", "Le classeur de données est illisible. Vérifiez le disque.", { cause: e });
+  }
+  return decodeWorkbook(buf);
 }
 
 /** Lecture seule de la dernière version. L'objet retourné ne doit jamais être modifié. */
@@ -406,6 +425,26 @@ async function autoBackup(): Promise<void> {
   }
 }
 
+/**
+ * Copie horaire de sécurité quand l'état vit en base. Elle part dans le dépôt de fichiers
+ * (Blob en ligne, disque en local) sous la même forme qu'une sauvegarde automatique classique.
+ */
+async function autoBackupBase(db: Db): Promise<void> {
+  if (!blobConfigured() && ephemeralHost()) return;
+  const s = state();
+  const depot = bucket();
+  if (s.lastAutoBackup === 0) {
+    const anciennes = await depot.list("backups/auto").catch(() => []);
+    s.lastAutoBackup = anciennes.length ? Math.max(...anciennes.map((f) => f.dateMs)) : 1;
+  }
+  if (Date.now() - s.lastAutoBackup < AUTO_BACKUP_EVERY_MS) return;
+  const stamp = nowIso().replace(/[-:]/g, "").replace(/\..+$/, "");
+  await depot.put(`backups/auto/oliva-${stamp}.xlsx`, await encodeWorkbook(db), { ecraser: true });
+  s.lastAutoBackup = Date.now();
+  const toutes = (await depot.list("backups/auto")).filter((f) => f.cle.endsWith(".xlsx")).sort((a, b) => a.cle.localeCompare(b.cle));
+  for (const vieille of toutes.slice(0, Math.max(0, toutes.length - AUTO_BACKUP_KEEP))) await depot.remove(vieille.cle);
+}
+
 async function archiveHistory(db: Db): Promise<void> {
   if (db.HistoriqueActions.length <= HISTORY_MAX) return;
   const moved = db.HistoriqueActions.splice(0, HISTORY_ARCHIVE_BATCH);
@@ -416,20 +455,44 @@ async function archiveHistory(db: Db): Promise<void> {
   for (const row of moved as AnyRow[]) {
     ws.addRow(keys.map((k) => (typeof row[k] === "object" ? JSON.stringify(row[k]) : (row[k] as string))));
   }
-  await ensureDir(paths.archives);
   const stamp = nowIso().replace(/[-:]/g, "").replace(/\..+$/, "");
-  await fsp.writeFile(path.join(paths.archives, `historique-${stamp}.xlsx`), Buffer.from(await wb.xlsx.writeBuffer()));
+  await bucket().put(`data/archives/historique-${stamp}.xlsx`, Buffer.from(await wb.xlsx.writeBuffer()), { ecraser: true });
 }
 
-/** Écrit `db` comme nouvelle version. Ne met le cache à jour qu'après le remplacement réussi. */
-async function commit(db: Db): Promise<void> {
+/** Signalement interne : quelqu'un d'autre a écrit entre la lecture et l'enregistrement. */
+class ConflitRevision extends Error {}
+
+/**
+ * Écrit `db` comme nouvelle version. Ne met le cache à jour qu'après l'enregistrement réussi.
+ * `premier` vaut vrai pour la toute première écriture, quand rien n'existe encore.
+ */
+async function commit(db: Db, premier = false, topics: string[] = []): Promise<void> {
+  sanitize(db);
+  await archiveHistory(db);
+  const attendue = premier ? null : db._meta.revision;
+  db._meta.revision += 1;
+  db._meta.majLe = nowIso();
+  if (postgresConfigured()) return commitBase(db, attendue, topics);
+  return commitFichier(db);
+}
+
+/** Enregistrement en base : écriture conditionnée à la révision, puis copie horaire si un dépôt durable existe. */
+async function commitBase(db: Db, attendue: number | null, topics: string[]): Promise<void> {
+  // Les sujets voyagent avec l'état : les autres serveurs apprennent ainsi quoi rafraîchir.
+  if (!(await pgEcrire(db, attendue, { sujets: topics, marque: changeMarker(db) }))) throw new ConflitRevision();
+  state().cache = { db: deepFreeze(db), sig: `pg:${db._meta.revision}` };
+  try {
+    await autoBackupBase(db);
+  } catch (e) {
+    console.error("[oliva:stockage] copie automatique impossible après une écriture réussie", e);
+  }
+}
+
+/** Enregistrement sur disque : fichier temporaire, relecture de contrôle, remplacement atomique. */
+async function commitFichier(db: Db): Promise<void> {
   const s = state();
   const tmp = path.join(paths.tmp, `oliva-${Date.now()}-${randomBytes(4).toString("hex")}.xlsx`);
   try {
-    sanitize(db);
-    await archiveHistory(db);
-    db._meta.revision += 1;
-    db._meta.majLe = nowIso();
     const buf = await encodeWorkbook(db);
 
     await ensureDir(paths.tmp);
@@ -510,58 +573,73 @@ export interface TxOptions {
  */
 export function transaction<R>(opts: TxOptions, fn: (db: Db, tx: Tx) => R | Promise<R>): Promise<R> {
   return withMutex(async () => {
-    await ensureInstanceLock();
-    const current = await loadLatest();
-    const now = nowIso();
-
-    if (opts.idempotencyKey) {
-      const hit = current.OperationsIdempotentes.find((o) => o.id === opts.idempotencyKey);
-      if (hit) {
-        if (hit.portee !== (opts.scope ?? "")) throw new AppError("conflit", "Cette clé d'opération a déjà servi pour une autre action.");
-        return hit.resultat as R;
+    // Avec une base partagée, un autre serveur peut enregistrer entre la lecture et l'écriture :
+    // le travail est alors refait sur l'état frais, jamais appliqué à l'aveugle.
+    for (let essai = 0; ; essai++) {
+      try {
+        return await tenterTransaction(opts, fn);
+      } catch (e) {
+        if (!(e instanceof ConflitRevision)) throw e;
+        state().cache = null;
+        if (essai >= 4) throw new AppError("conflit", "Plusieurs enregistrements simultanés se sont succédé. Rien n'a été modifié : réessayez.");
+        await new Promise((r) => setTimeout(r, 40 * (essai + 1)));
       }
     }
-
-    const draft = structuredClone(current);
-    const logs: LogEntry[] = [];
-    const topics = new Set<string>();
-    const tx: Tx = { now, actor: opts.actor, id: newId, log: (e) => logs.push(e), publish: (t) => topics.add(t) };
-
-    const result = await fn(draft, tx);
-
-    for (const e of logs) {
-      draft.HistoriqueActions.push({
-        id: newId("evt"),
-        date: now,
-        auteurId: tx.actor?.id ?? "",
-        auteurNom: tx.actor?.nom ?? "Système",
-        action: e.action,
-        libelle: e.libelle,
-        entite: e.entite,
-        entiteId: e.entiteId ?? "",
-        entiteNom: e.entiteNom ?? "",
-        resultat: e.resultat ?? "Appliqué",
-        avant: e.avant ?? null,
-        apres: e.apres ?? null,
-      });
-    }
-    if (opts.idempotencyKey) {
-      const limit = Date.now() - IDEMPOTENCY_TTL_MS;
-      draft.OperationsIdempotentes = draft.OperationsIdempotentes.filter((o) => Date.parse(o.creeLe) > limit);
-      draft.OperationsIdempotentes.push({ id: opts.idempotencyKey, portee: opts.scope ?? "", resultat: (result ?? null) as unknown, creeLe: now });
-    }
-
-    validateDb(draft);
-    await commit(draft);
-
-    const event: CommitEvent = { revision: draft._meta.revision, topics: [...topics], actorId: tx.actor?.id ?? null, clientId: tx.actor?.client ?? null, marque: changeMarker(draft) };
-    try {
-      state().bus.emit("commit", event);
-    } catch (e) {
-      console.error("[oliva:stockage] diffusion impossible après une écriture réussie", e);
-    }
-    return result;
   });
+}
+
+async function tenterTransaction<R>(opts: TxOptions, fn: (db: Db, tx: Tx) => R | Promise<R>): Promise<R> {
+  await ensureInstanceLock();
+  const current = await loadLatest();
+  const now = nowIso();
+
+  if (opts.idempotencyKey) {
+    const hit = current.OperationsIdempotentes.find((o) => o.id === opts.idempotencyKey);
+    if (hit) {
+      if (hit.portee !== (opts.scope ?? "")) throw new AppError("conflit", "Cette clé d'opération a déjà servi pour une autre action.");
+      return hit.resultat as R;
+    }
+  }
+
+  const draft = structuredClone(current);
+  const logs: LogEntry[] = [];
+  const topics = new Set<string>();
+  const tx: Tx = { now, actor: opts.actor, id: newId, log: (e) => logs.push(e), publish: (t) => topics.add(t) };
+
+  const result = await fn(draft, tx);
+
+  for (const e of logs) {
+    draft.HistoriqueActions.push({
+      id: newId("evt"),
+      date: now,
+      auteurId: tx.actor?.id ?? "",
+      auteurNom: tx.actor?.nom ?? "Système",
+      action: e.action,
+      libelle: e.libelle,
+      entite: e.entite,
+      entiteId: e.entiteId ?? "",
+      entiteNom: e.entiteNom ?? "",
+      resultat: e.resultat ?? "Appliqué",
+      avant: e.avant ?? null,
+      apres: e.apres ?? null,
+    });
+  }
+  if (opts.idempotencyKey) {
+    const limit = Date.now() - IDEMPOTENCY_TTL_MS;
+    draft.OperationsIdempotentes = draft.OperationsIdempotentes.filter((o) => Date.parse(o.creeLe) > limit);
+    draft.OperationsIdempotentes.push({ id: opts.idempotencyKey, portee: opts.scope ?? "", resultat: (result ?? null) as unknown, creeLe: now });
+  }
+
+  validateDb(draft);
+  await commit(draft, false, [...topics]);
+
+  const event: CommitEvent = { revision: draft._meta.revision, topics: [...topics], actorId: tx.actor?.id ?? null, clientId: tx.actor?.client ?? null, marque: changeMarker(draft) };
+  try {
+    state().bus.emit("commit", event);
+  } catch (e) {
+    console.error("[oliva:stockage] diffusion impossible après une écriture réussie", e);
+  }
+  return result;
 }
 
 /** Abonnement aux sauvegardes réussies (diffusion SSE). Retourne la fonction de désabonnement. */
@@ -588,6 +666,11 @@ export function exclusive<R>(fn: (db: Db) => Promise<R>): Promise<R> {
 export function restoreWorkbookFrom(file: string): Promise<{ revision: number; ancien: string | null }> {
   return withMutex(async () => {
     const db = await readWorkbookFile(file);
+    if (postgresConfigured()) {
+      await pgRemplacer(db);
+      state().cache = null;
+      return { revision: db._meta.revision, ancien: "la version remplacée reste dans la colonne `precedent` de la base" };
+    }
     await ensureInstanceLock();
     await ensureDir(paths.tmp);
     const tmp = path.join(paths.tmp, `restauration-${Date.now()}.xlsx`);
@@ -605,18 +688,23 @@ export function restoreWorkbookFrom(file: string): Promise<{ revision: number; a
 }
 
 export async function readWorkbookFile(file: string): Promise<Db> {
-  const db = await decodeWorkbook(await fsp.readFile(file));
+  return readWorkbookBuffer(await fsp.readFile(file));
+}
+
+/** Lit et valide un classeur reçu en mémoire (sauvegarde, import, dépôt distant). */
+export async function readWorkbookBuffer(buf: Buffer): Promise<Db> {
+  const db = await decodeWorkbook(buf);
   validateDb(db);
   return db;
 }
 
 export async function storageInfo() {
   const db = await readDb();
-  const st = await fsp.stat(paths.workbook);
+  const tailleOctets = postgresConfigured() ? (await pgInfo()).tailleOctets : (await fsp.stat(paths.workbook)).size;
   return {
     revision: db._meta.revision,
     majLe: db._meta.majLe,
-    tailleOctets: st.size,
+    tailleOctets,
     lignes: SHEETS.reduce((n, sName) => n + db[sName].length, 0),
     historique: db.HistoriqueActions.length,
     demo: db._meta.donneesDemo,
@@ -633,5 +721,10 @@ export function __releaseLock() {
   const s = state();
   if (s.heartbeat) clearInterval(s.heartbeat);
   s.heartbeat = null;
+  if (postgresConfigured()) {
+    // Sans cela, une commande en ligne garderait ses connexions ouvertes et ne rendrait jamais la main.
+    void pgFermer();
+    return;
+  }
   releaseLockSync(s);
 }

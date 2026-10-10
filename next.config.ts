@@ -10,7 +10,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // exceljs et sharp restent des modules Node natifs, jamais empaquetés côté navigateur.
-  serverExternalPackages: ["exceljs", "sharp"],
+  serverExternalPackages: ["exceljs", "sharp", "pg"],
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

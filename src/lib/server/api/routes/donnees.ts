@@ -1,16 +1,17 @@
 import "server-only";
-import fsp from "node:fs/promises";
 import { z } from "zod";
 import { formatDateTime } from "../../../format";
 import { changeMarker } from "../../db-utils";
 import { AppError, invalide } from "../../errors";
 import type { Db, Row } from "../../schema";
-import { backupWorkbookPath, createBackup, deleteBackup, previewRestore, restoreBackup } from "../../services/backups";
+import { backupWorkbookKey, createBackup, deleteBackup, previewRestore, restoreBackup } from "../../services/backups";
+import { bucket } from "../../store/bucket";
 import { collectGarbage } from "../../services/media";
 import { cancelScheduled, publish } from "../../services/publication";
 import { IMPORT_MAX_BYTES, applyImport, exportData, previewImport, toCsv } from "../../services/transfer";
 import { onCommit, readDb } from "../../storage";
 import { assertBodySize, choix, txt, type Ctx, type Routes } from "../core";
+import { watchOthers } from "../stream";
 
 const PERM = "donnees.gerer" as const;
 
@@ -78,7 +79,7 @@ export const donneesRoutes: Routes = {
   "GET sauvegardes/:id/fichier": {
     perm: PERM,
     run: async (c) => {
-      const data = await fsp.readFile(backupWorkbookPath(c.params.id)).catch(() => null);
+      const data = await bucket().get(backupWorkbookKey(c.params.id));
       if (!data) throw new AppError("introuvable", "Sauvegarde introuvable.");
       return download(data, `${c.params.id}.xlsx`, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     },
@@ -138,9 +139,12 @@ export const donneesRoutes: Routes = {
           send("pret", { marque });
           // « moi » désigne l'onglet qui a enregistré, pas l'utilisateur : ses autres onglets sont prévenus eux aussi.
           const off = onCommit((e) => send("sauvegarde", { marque: e.marque, sujets: e.topics, moi: client !== "" && e.clientId === client }));
+          // Écriture venue d'un autre serveur : jamais « moi », puisque cet onglet n'y est pour rien.
+          const stop = watchOthers((sujets, marqueAutre) => send("sauvegarde", { marque: marqueAutre, sujets, moi: false }));
           const ping = setInterval(() => send("ping", {}), 25_000);
           cleanup = () => {
             off();
+            stop();
             clearInterval(ping);
           };
           c.req.signal.addEventListener("abort", () => {

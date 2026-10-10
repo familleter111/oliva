@@ -1,5 +1,4 @@
-import fsp from "node:fs/promises";
-import { MEDIA_NAME, mediaPath } from "@/lib/server/services/media";
+import { MEDIA_NAME, readMedia } from "@/lib/server/services/media";
 import { isPublishedFile } from "@/lib/server/services/menu";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +11,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ fichier: strin
   if (!MEDIA_NAME.test(fichier)) return notFound();
   try {
     if (!(await isPublishedFile(fichier))) return notFound();
-    const data = await fsp.readFile(mediaPath(fichier));
+    const data = await readMedia(fichier);
+    if (!data) return notFound();
     return new Response(new Uint8Array(data), {
       headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" },
     });

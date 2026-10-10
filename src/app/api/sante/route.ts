@@ -1,6 +1,8 @@
 import { appSecret, ephemeralHost, storageRoot } from "@/lib/server/env";
 import { isAppError } from "@/lib/server/errors";
 import { readDb } from "@/lib/server/storage";
+import { blobConfigured } from "@/lib/server/store/bucket";
+import { postgresConfigured } from "@/lib/server/store/postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -12,16 +14,25 @@ const json = (body: unknown, status: number) =>
 
 /**
  * État du service, destiné à l'exploitation : sonde de l'hébergeur et diagnostic après une mise en ligne.
- * Ne renvoie aucune donnée du restaurant ni aucun secret, seulement la cause d'une panne de stockage.
+ * Ne renvoie aucune donnée du restaurant ni aucun secret, seulement de quoi comprendre une panne.
  */
 export async function GET() {
   const details: Record<string, string> = {};
+  const base = postgresConfigured();
+  const blob = blobConfigured();
   const hote = ephemeralHost();
-  if (hote) details.hebergement = `${hote} (système de fichiers éphémère, incompatible)`;
-  try {
-    details.stockage = storageRoot();
-  } catch {
-    details.stockage = "chemin invalide";
+
+  details.donnees = base ? "base de données" : "classeur Excel sur disque";
+  details.fichiers = blob ? "dépôt Blob" : "disque";
+  if (!base) {
+    try {
+      details.dossier = storageRoot();
+    } catch {
+      details.dossier = "chemin invalide";
+    }
+  }
+  if (hote && (!base || !blob)) {
+    details.avertissement = `Hébergement ${hote} : ${!base ? "les données" : "les images et les sauvegardes"} ont besoin d'un stockage qui survit aux requêtes.`;
   }
 
   try {

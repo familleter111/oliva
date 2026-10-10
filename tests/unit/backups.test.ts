@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import ExcelJS from "exceljs";
+import { bucket as depot } from "@/lib/server/store/bucket";
 import { ACTOR, setup } from "./helpers";
 
 type Storage = typeof import("@/lib/server/storage");
 type Backups = typeof import("@/lib/server/services/backups");
+
 
 describe("sauvegardes et restauration", () => {
   let s: Storage;
@@ -53,7 +55,7 @@ describe("sauvegardes et restauration", () => {
     const db = await s.readDb();
     for (const id of ["../data", "..\\..\\data", "manuel-20260101-000000-zzzz/../..", ""]) {
       await assert.rejects(b.previewRestore(id, db), (e: { code?: string }) => e.code === "invalide");
-      assert.throws(() => b.backupWorkbookPath(id), (e: { code?: string }) => e.code === "invalide");
+      assert.throws(() => b.backupWorkbookKey(id), (e: { code?: string }) => e.code === "invalide");
     }
   });
 
@@ -96,21 +98,21 @@ describe("sauvegardes et restauration", () => {
     assert.equal(list.manuelles.length, 2, "une sauvegarde de sécurité a été créée avant la restauration");
     const safety = list.manuelles.find((m) => m.id === out.securite);
     assert.equal(safety?.note, "Avant restauration");
-    const kept = await s.readWorkbookFile(b.backupWorkbookPath(out.securite));
+    const kept = await s.readWorkbookBuffer((await depot().get(b.backupWorkbookKey(out.securite)))!);
     assert.equal(kept.Restaurant[0].nom, "Après sauvegarde", "l'état d'avant restauration reste récupérable");
   });
 
   it("refuse une sauvegarde sans administrateur actif", async () => {
-    const file = b.backupWorkbookPath(backupId);
-    const original = fs.readFileSync(file);
-    const db = await s.readWorkbookFile(file);
+    const cle = b.backupWorkbookKey(backupId);
+    const original = (await depot().get(cle))!;
+    const db = await s.readWorkbookBuffer(original);
     db.Utilisateurs[0].statut = "suspendu";
     const { encodeWorkbook } = await import("@/lib/server/workbook");
-    fs.writeFileSync(file, await encodeWorkbook(db));
+    await depot().put(cle, await encodeWorkbook(db), { ecraser: true });
     const preview = await b.previewRestore(backupId, await s.readDb());
     assert.ok(preview.blocages.some((x) => /aucun administrateur actif/.test(x)));
     await assert.rejects(b.restoreBackup(ACTOR, backupId), (e: { code?: string }) => e.code === "conflit");
-    fs.writeFileSync(file, original);
+    await depot().put(cle, original, { ecraser: true });
   });
 
   it("supprime une sauvegarde sur demande", async () => {

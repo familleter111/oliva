@@ -1,10 +1,8 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import fsp from "node:fs/promises";
-import path from "node:path";
 import sharp, { type Metadata } from "sharp";
-import { ensureDir, paths } from "../env";
 import { AppError, invalide } from "../errors";
+import { bucket } from "../store/bucket";
 import type { Db } from "../schema";
 import { FULL_MAX, MEDIA_NAME, VARIANTS, allFiles, variantName } from "./media-names";
 import { decodeSnapshot } from "./publication";
@@ -26,10 +24,15 @@ export interface StoredImage {
   taille: number;
 }
 
-/** Chemin d'un fichier média, uniquement pour un nom généré par l'application. */
-export function mediaPath(name: string): string {
+/** Clé d'un fichier média dans le dépôt, uniquement pour un nom généré par l'application. */
+export function mediaKey(name: string): string {
   if (!MEDIA_NAME.test(name)) throw invalide("Nom de fichier refusé.");
-  return path.join(paths.media, name);
+  return `media/${name}`;
+}
+
+/** Contenu d'un média, ou `null` s'il n'existe plus. */
+export function readMedia(name: string): Promise<Buffer | null> {
+  return bucket().get(mediaKey(name));
 }
 
 /**
@@ -60,13 +63,13 @@ export async function storeImage(input: Buffer, crop?: { left: number; top: numb
     const id = randomBytes(16).toString("hex");
     const fichier = `${id}.webp`;
     const stored: StoredImage = { fichier, miniature: variantName(fichier, "s"), format, largeur: main.info.width, hauteur: main.info.height, taille: main.data.length };
-    await ensureDir(paths.media);
+    const depot = bucket();
     try {
-      await fsp.writeFile(mediaPath(fichier), main.data, { flag: "wx" });
+      await depot.put(mediaKey(fichier), main.data, { typeMime: "image/webp" });
       // Variantes plus légères : le navigateur ne télécharge que la taille utile à l'écran.
       for (const [v, width, quality] of VARIANTS) {
         const data = await base.clone().resize({ width, withoutEnlargement: true }).webp({ quality }).toBuffer();
-        await fsp.writeFile(mediaPath(variantName(fichier, v)), data, { flag: "wx" });
+        await depot.put(mediaKey(variantName(fichier, v)), data, { typeMime: "image/webp" });
       }
     } catch (e) {
       await removeStored(stored);
@@ -82,14 +85,16 @@ export async function storeImage(input: Buffer, crop?: { left: number; top: numb
 
 export async function removeStored(img: { fichier: string } | null): Promise<void> {
   if (!img) return;
+  const depot = bucket();
   for (const f of allFiles(img.fichier)) {
-    if (MEDIA_NAME.test(f)) await fsp.rm(path.join(paths.media, f), { force: true }).catch(() => undefined);
+    if (MEDIA_NAME.test(f)) await depot.remove(mediaKey(f));
   }
 }
 
 /** Recadre une image existante selon des fractions (0 à 1) et enregistre un nouveau fichier. */
 export async function cropStored(fichier: string, zone: { x: number; y: number; w: number; h: number }): Promise<StoredImage> {
-  const buf = await fsp.readFile(mediaPath(fichier));
+  const buf = await readMedia(fichier);
+  if (!buf) throw invalide("Image introuvable sur le disque.");
   const meta = await sharp(buf).metadata();
   const W = meta.width ?? 0;
   const H = meta.height ?? 0;
@@ -125,18 +130,14 @@ export async function collectGarbage(db: Db): Promise<number> {
   const keep = referencedFiles(db);
   if (keep.has("*")) return 0;
   let removed = 0;
-  let files: string[] = [];
-  try {
-    files = await fsp.readdir(paths.media);
-  } catch {
-    return 0;
-  }
-  for (const f of files) {
+  const depot = bucket();
+  const entrees = await depot.list("media").catch(() => []);
+  for (const e of entrees) {
+    const f = e.cle.slice("media/".length);
     if (!MEDIA_NAME.test(f) || keep.has(f)) continue;
-    const full = path.join(paths.media, f);
-    const st = await fsp.stat(full).catch(() => null);
-    if (st && Date.now() - st.mtimeMs > 3600 * 1000) {
-      await fsp.rm(full, { force: true }).catch(() => undefined);
+    // Marge d'une heure : une image tout juste déposée n'est pas encore référencée.
+    if (Date.now() - e.dateMs > 3600 * 1000) {
+      await depot.remove(e.cle);
       removed++;
     }
   }

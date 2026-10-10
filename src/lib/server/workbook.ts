@@ -214,3 +214,117 @@ export function fingerprint(db: Db): string {
   }
   return JSON.stringify(parts);
 }
+
+/* ------------------------------------------------------- forme JSON (base de données) */
+
+/**
+ * Même contenu que le classeur, sérialisé en JSON pour un stockage en base.
+ * Seules les colonnes du schéma sont écrites, dans leur ordre : aucune donnée parasite ne passe.
+ */
+export function encodeJsonDb(db: Db): string {
+  const out: Record<string, unknown> = { _meta: { ...db._meta, schemaVersion: SCHEMA_VERSION } };
+  for (const name of SHEETS) {
+    const cols = columnsOf(name);
+    out[name] = (db[name] as AnyRow[]).map((row, n) => {
+      const ligne: Record<string, unknown> = {};
+      for (const [k, t] of Object.entries(cols)) ligne[k] = checkJson(t, row[k], `${name}!${k} (ligne ${n + 2})`);
+      return ligne;
+    });
+  }
+  return JSON.stringify(out);
+}
+
+function checkJson(t: string, v: unknown, where: string): unknown {
+  switch (t) {
+    case "string":
+    case "date":
+      if (typeof v !== "string") throw invalid(`${where} doit être un texte.`);
+      return v;
+    case "int":
+      if (!Number.isInteger(v)) throw invalid(`${where} doit être un entier.`);
+      return v;
+    case "int?":
+      if (v !== null && !Number.isInteger(v)) throw invalid(`${where} doit être un entier ou vide.`);
+      return v ?? null;
+    case "bool":
+      if (typeof v !== "boolean") throw invalid(`${where} doit être vrai ou faux.`);
+      return v;
+    case "ids":
+      if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw invalid(`${where} doit être une liste d'identifiants.`);
+      return v;
+    default:
+      return v ?? null;
+  }
+}
+
+/**
+ * Relit la forme JSON avec la même sévérité que le classeur Excel.
+ * Un enregistrement écrit par une version plus ancienne est mis à niveau en mémoire.
+ */
+export function decodeJsonDb(texte: string): Db {
+  let brut: unknown;
+  try {
+    brut = JSON.parse(texte);
+  } catch (cause) {
+    throw new AppError("stockage", "Enregistrement invalide : le contenu n'est pas du JSON lisible. Aucune donnée n'a été modifiée.", { cause });
+  }
+  if (!brut || typeof brut !== "object") throw invalid("l'enregistrement est vide.");
+  const src = brut as Record<string, unknown>;
+  const metaSrc = (src._meta ?? {}) as Record<string, unknown>;
+
+  const schemaVersion = Number(metaSrc.schemaVersion);
+  if (!Number.isInteger(schemaVersion)) throw invalid("la version du schéma est illisible.");
+  if (schemaVersion > SCHEMA_VERSION) throw invalid(`il a été écrit par une version plus récente de l'application (schéma ${schemaVersion}).`);
+  if (schemaVersion < 1) throw invalid(`le schéma ${schemaVersion} demande une migration vers ${SCHEMA_VERSION}, non fournie par cette version.`);
+
+  const meta: Meta = {
+    schemaVersion: SCHEMA_VERSION,
+    revision: Number(metaSrc.revision ?? 0) || 0,
+    creeLe: String(metaSrc.creeLe ?? ""),
+    majLe: String(metaSrc.majLe ?? ""),
+    donneesDemo: metaSrc.donneesDemo === true,
+  };
+
+  const db = { _meta: meta } as Db;
+  for (const name of SHEETS) {
+    const brutes = src[name];
+    if (brutes === undefined) {
+      if ((SHEET_SINCE[name] ?? 1) > schemaVersion) {
+        (db as unknown as Record<SheetName, AnyRow[]>)[name] = [];
+        continue;
+      }
+      throw invalid(`la table « ${name} » est absente.`);
+    }
+    if (!Array.isArray(brutes)) throw invalid(`la table « ${name} » devrait être une liste.`);
+    const cols = columnsOf(name);
+    (db as unknown as Record<SheetName, AnyRow[]>)[name] = brutes.map((ligne, i) => {
+      if (!ligne || typeof ligne !== "object") throw invalid(`ligne illisible dans « ${name} » (${i + 1}).`);
+      const row = ligne as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, t] of Object.entries(cols)) {
+        const where = `${name}!${k} (ligne ${i + 2})`;
+        out[k] = row[k] === undefined ? defautJson(t) : checkJson(t, row[k], where);
+      }
+      if (!out.id) throw invalid(`identifiant manquant dans « ${name} » (ligne ${i + 2}).`);
+      return out as AnyRow;
+    });
+  }
+  return db;
+}
+
+/** Valeur d'une colonne ajoutée par une version plus récente que l'enregistrement relu. */
+function defautJson(t: string): unknown {
+  switch (t) {
+    case "string":
+    case "date":
+      return "";
+    case "int":
+      return 0;
+    case "bool":
+      return false;
+    case "ids":
+      return [];
+    default:
+      return null;
+  }
+}
