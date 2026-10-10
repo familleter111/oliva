@@ -1,0 +1,19 @@
+# Rien de tout cela n'entre dans l'image : données réelles, secrets, artefacts locaux.
+node_modules
+.next
+out
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+storage
+storage-*
+tests/.tmp
+.git
+.github
+.vscode
+.DS_Store
+npm-debug.log*
+Dockerfile
+docker-compose.yml
+README.md

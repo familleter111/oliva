@@ -6,7 +6,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import ExcelJS from "exceljs";
-import { paths } from "./env";
+import { ensureDir, ephemeralHost, paths } from "./env";
 import { AppError, isAppError } from "./errors";
 import { changeMarker } from "./db-utils";
 import { initialDb } from "./defaults";
@@ -172,7 +172,7 @@ async function ensureInstanceLock(): Promise<void> {
     if (l && !lockIsStale(l)) throw lockedError(l);
   }
 
-  await fsp.mkdir(paths.data, { recursive: true });
+  await ensureDir(paths.data);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const fh = await fsp.open(paths.lock, "wx");
@@ -286,6 +286,14 @@ async function loadLatest(): Promise<Db> {
       "Le classeur principal est introuvable alors que ce stockage a déjà été initialisé. Il n'a pas été recréé pour ne rien écraser : restaurez `oliva.precedent.xlsx` ou une sauvegarde avec `npm run storage:restaurer`.",
     );
   }
+  // Un hébergement éphémère recréerait un classeur vide à chaque démarrage, et autant de fois qu'il y a d'instances.
+  const hote = ephemeralHost();
+  if (hote) {
+    throw new AppError(
+      "configuration",
+      `Oliva fonctionne sur ${hote}, dont le système de fichiers est éphémère et propre à chaque instance. Aucun classeur n'y a été créé : les données seraient perdues à la requête suivante. Hébergez l'application sur un serveur Node avec un disque persistant, puis pointez OLIVA_STORAGE_DIR sur ce disque.`,
+    );
+  }
   await ensureInstanceLock();
   const db = initialDb(nowIso());
   await commit(db);
@@ -388,7 +396,7 @@ async function autoBackup(): Promise<void> {
     }
   }
   if (Date.now() - s.lastAutoBackup < AUTO_BACKUP_EVERY_MS) return;
-  await fsp.mkdir(paths.autoBackups, { recursive: true });
+  await ensureDir(paths.autoBackups);
   const stamp = nowIso().replace(/[-:]/g, "").replace(/\..+$/, "");
   await fsp.copyFile(paths.workbook, path.join(paths.autoBackups, `oliva-${stamp}.xlsx`));
   s.lastAutoBackup = Date.now();
@@ -408,7 +416,7 @@ async function archiveHistory(db: Db): Promise<void> {
   for (const row of moved as AnyRow[]) {
     ws.addRow(keys.map((k) => (typeof row[k] === "object" ? JSON.stringify(row[k]) : (row[k] as string))));
   }
-  await fsp.mkdir(paths.archives, { recursive: true });
+  await ensureDir(paths.archives);
   const stamp = nowIso().replace(/[-:]/g, "").replace(/\..+$/, "");
   await fsp.writeFile(path.join(paths.archives, `historique-${stamp}.xlsx`), Buffer.from(await wb.xlsx.writeBuffer()));
 }
@@ -424,7 +432,7 @@ async function commit(db: Db): Promise<void> {
     db._meta.majLe = nowIso();
     const buf = await encodeWorkbook(db);
 
-    await fsp.mkdir(paths.tmp, { recursive: true });
+    await ensureDir(paths.tmp);
     fail("write");
     const fh = await fsp.open(tmp, "wx");
     try {
@@ -581,7 +589,7 @@ export function restoreWorkbookFrom(file: string): Promise<{ revision: number; a
   return withMutex(async () => {
     const db = await readWorkbookFile(file);
     await ensureInstanceLock();
-    await fsp.mkdir(paths.tmp, { recursive: true });
+    await ensureDir(paths.tmp);
     const tmp = path.join(paths.tmp, `restauration-${Date.now()}.xlsx`);
     await fsp.copyFile(file, tmp);
     let ancien: string | null = null;

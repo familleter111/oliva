@@ -48,7 +48,7 @@ export const config = {
     "/admin/:path*",
     // Les autres pages reçoivent la politique de contenu. Fichiers statiques, images et API exclus.
     {
-      source: "/((?!api|_next/static|_next/image|media|brand|favicon.ico|icon.svg).*)",
+      source: "/((?!api|_next/static|_next/image|media|brand|favicon.ico|favicon.png|icon.svg).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

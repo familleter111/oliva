@@ -1,4 +1,5 @@
 import "server-only";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import { AppError } from "./errors";
 
@@ -71,4 +72,44 @@ export function cookieSecure(): boolean {
 /** URL publique configurée, sans barre finale. Vide si non renseignée. */
 export function publicUrl(): string {
   return (process.env.OLIVA_PUBLIC_URL ?? "").trim().replace(/\/+$/, "");
+}
+
+/**
+ * Plateforme à système de fichiers éphémère, si elle est reconnue.
+ * Oliva garde ses données dans des fichiers : il lui faut un disque qui survit aux requêtes.
+ */
+export function ephemeralHost(): string {
+  if (process.env.VERCEL) return "Vercel";
+  if (process.env.NETLIFY) return "Netlify";
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) return "AWS Lambda";
+  if (process.env.FUNCTIONS_WORKER_RUNTIME) return "Azure Functions";
+  return "";
+}
+
+/** Codes renvoyés par un hébergement qui n'autorise pas l'écriture, par opposition à un incident de disque. */
+const REFUS_HEBERGEMENT = new Set(["EROFS", "EACCES", "EPERM", "ENOENT"]);
+
+/** Crée un dossier du stockage. En cas de refus du disque, explique la cause plutôt que de laisser passer un code système. */
+export async function ensureDir(dir: string): Promise<void> {
+  try {
+    await fsp.mkdir(dir, { recursive: true });
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? "inconnu";
+    if (!REFUS_HEBERGEMENT.has(code)) {
+      throw new AppError("stockage", `Le dossier de stockage « ${dir} » n'a pas pu être créé (${code}). Vérifiez l'état du disque. Aucune donnée n'a été modifiée.`, { cause: e });
+    }
+    const hote = ephemeralHost();
+    if (hote) {
+      throw new AppError(
+        "configuration",
+        `Oliva ne peut pas fonctionner sur ${hote} : le dossier de stockage « ${dir} » n'est pas inscriptible et le système de fichiers y est recréé à chaque requête. Déployez l'application sur un serveur Node avec un disque persistant (conteneur avec volume, serveur privé virtuel), puis pointez OLIVA_STORAGE_DIR sur ce disque.`,
+        { cause: e },
+      );
+    }
+    throw new AppError(
+      "configuration",
+      `Le dossier de stockage « ${dir} » n'a pas pu être créé (${code}). Vérifiez que le chemin est inscriptible par l'utilisateur du serveur et la valeur de OLIVA_STORAGE_DIR.`,
+      { cause: e },
+    );
+  }
 }

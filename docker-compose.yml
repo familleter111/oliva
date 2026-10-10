@@ -1,0 +1,24 @@
+# Une seule instance, un volume nommé pour les données. Ne jamais monter `storage` dans l'image.
+services:
+  oliva:
+    build: .
+    image: oliva
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      OLIVA_STORAGE_DIR: /data
+      # À définir dans un fichier .env à côté de ce fichier, jamais en clair ici.
+      OLIVA_SECRET: ${OLIVA_SECRET:?définissez OLIVA_SECRET (32 caractères minimum)}
+      OLIVA_PUBLIC_URL: ${OLIVA_PUBLIC_URL:-}
+      OLIVA_ADMIN_EMAIL: ${OLIVA_ADMIN_EMAIL:-}
+      OLIVA_ADMIN_PASSWORD: ${OLIVA_ADMIN_PASSWORD:-}
+      OLIVA_ADMIN_NAME: ${OLIVA_ADMIN_NAME:-}
+    volumes:
+      - oliva-donnees:/data
+    # Une seule instance : le stockage refuse un second processus écrivain.
+    deploy:
+      replicas: 1
+
+volumes:
+  oliva-donnees:

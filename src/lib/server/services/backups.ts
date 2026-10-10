@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { isActiveAdmin } from "../db-utils";
-import { paths } from "../env";
+import { ensureDir, paths } from "../env";
 import { AppError, conflit, introuvable, invalide } from "../errors";
 import { SHEETS, SHEET_LABEL, type AnyRow, type Db, type SheetName } from "../schema";
 import { exclusive, readDb, readWorkbookFile, transaction, type Actor } from "../storage";
@@ -40,7 +40,7 @@ export async function createBackup(actor: Actor, note = ""): Promise<BackupManif
   const dir = dirOf(id);
   try {
     const manifest = await exclusive(async (db) => {
-      await fsp.mkdir(path.join(dir, "media"), { recursive: true });
+      await ensureDir(path.join(dir, "media"));
       await fsp.copyFile(paths.workbook, path.join(dir, "oliva.xlsx"));
       let medias = 0;
       const files = await fsp.readdir(paths.media).catch(() => [] as string[]);
@@ -127,7 +127,7 @@ export async function restoreBackup(actor: Actor, id: string) {
 
   const safety = await createBackup(actor, "Avant restauration");
 
-  await fsp.mkdir(paths.media, { recursive: true });
+  await ensureDir(paths.media);
   for (const f of await fsp.readdir(path.join(dirOf(id), "media")).catch(() => [] as string[])) {
     if (!MEDIA_NAME.test(f)) continue;
     await fsp.copyFile(path.join(dirOf(id), "media", f), path.join(paths.media, f), fsp.constants.COPYFILE_EXCL).catch((e: NodeJS.ErrnoException) => {

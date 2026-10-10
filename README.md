@@ -235,6 +235,22 @@ Compatible : un serveur privé virtuel, une machine dédiée, ou une plateforme 
 
 Non compatible : les plateformes sans serveur ou à système de fichiers éphémère (Vercel, Netlify, fonctions Lambda), ainsi que tout déploiement à plusieurs instances. Les données y seraient perdues ou corrompues.
 
+Sur ces plateformes, l'application ne se lance pas et l'explique : le dossier de stockage ne peut pas être créé, et aucun classeur vide n'est écrit pour ne rien laisser croire. La cause exacte est lisible sur `/api/sante`, qui sert aussi de sonde d'état à l'hébergeur.
+
+### Avec Docker
+
+Une image, un volume, une seule instance :
+
+```bash
+cp .env.example .env            # renseignez au moins OLIVA_SECRET
+docker compose up -d --build
+docker compose exec oliva npm run admin:init   # une seule fois, avec OLIVA_ADMIN_EMAIL et OLIVA_ADMIN_PASSWORD
+```
+
+Le volume `oliva-donnees` est monté sur `/data` et contient tout le stockage. Il survit aux reconstructions de l'image : ne le supprimez pas. Les commandes d'exploitation s'exécutent dans le conteneur, par exemple `docker compose exec oliva npm run storage:verifier`.
+
+### Sans Docker
+
 Mise en place :
 
 ```bash
@@ -250,6 +266,7 @@ npm start              # derrière un proxy inverse HTTPS
 - Servez le site en HTTPS derrière un proxy inverse (Caddy, Nginx), de préférence en HTTP/2. Désactivez la mise en tampon des réponses pour `/api/admin/evenements`, qui est un flux d'événements.
 - Gardez une seule instance. Pour mettre à jour : arrêtez l'application, déployez, relancez.
 - Copiez régulièrement le dossier de stockage complet hors du serveur. Les sauvegardes internes protègent d'une erreur de manipulation, pas d'une panne de disque.
+- `GET /api/sante` renvoie `{ "ok": true }` quand le stockage répond, et sinon la cause en clair avec le code 503. Aucune donnée du restaurant ni aucun secret n'y figure.
 
 ## Sauvegarde et récupération
 

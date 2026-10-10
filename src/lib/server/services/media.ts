@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import sharp, { type Metadata } from "sharp";
-import { paths } from "../env";
+import { ensureDir, paths } from "../env";
 import { AppError, invalide } from "../errors";
 import type { Db } from "../schema";
 import { FULL_MAX, MEDIA_NAME, VARIANTS, allFiles, variantName } from "./media-names";
@@ -60,7 +60,7 @@ export async function storeImage(input: Buffer, crop?: { left: number; top: numb
     const id = randomBytes(16).toString("hex");
     const fichier = `${id}.webp`;
     const stored: StoredImage = { fichier, miniature: variantName(fichier, "s"), format, largeur: main.info.width, hauteur: main.info.height, taille: main.data.length };
-    await fsp.mkdir(paths.media, { recursive: true });
+    await ensureDir(paths.media);
     try {
       await fsp.writeFile(mediaPath(fichier), main.data, { flag: "wx" });
       // Variantes plus légères : le navigateur ne télécharge que la taille utile à l'écran.
