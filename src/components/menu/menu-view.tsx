@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Clock, CookingPot, EnvelopeSimple, ForkKnife, Leaf, MapPin, Pepper, Phone, PicnicTable, Plant, QrCode, Tag, Timer, X } from "@phosphor-icons/react/dist/ssr";
+import { ArrowDown, CaretRight, Clock, CookingPot, EnvelopeSimple, ForkKnife, Leaf, MapPin, Pepper, Phone, PicnicTable, Plant, QrCode, Tag, Timer, X } from "@phosphor-icons/react/dist/ssr";
 import { Dialog } from "radix-ui";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { BackButton } from "@/components/back-button";
@@ -188,6 +188,51 @@ function layout(n: number): { cols: string; variant: (i: number) => "tile" | "ro
   return { cols: "sm:grid-cols-2 lg:grid-cols-3", variant: (i) => (featured.includes(i) ? "feature" : "tile") };
 }
 
+/**
+ * Mise en avant de l'accueil : le premier plat disponible de chaque catégorie, au plus quatre.
+ * Rien n'est inventé : ces plats viennent de la carte publiée, et la section disparaît sous deux plats.
+ */
+function highlights(categories: MenuCategory[]): MenuProduct[] {
+  const out: MenuProduct[] = [];
+  for (const c of categories) {
+    const p = c.produits.find((x) => x.disponible && x.image) ?? c.produits.find((x) => x.disponible);
+    if (p) out.push(p);
+    if (out.length === 4) break;
+  }
+  return out.length >= 2 ? out : [];
+}
+
+function HighlightCard({ p, devise, onOpen }: { p: MenuProduct; devise: string; onOpen: () => void }) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group flex h-full w-full flex-col overflow-hidden rounded-2xl border border-(--m-line) bg-white text-left transition-[transform,box-shadow] duration-200 ease-(--ease-out) active:scale-[0.985] [@media(hover:hover)]:hover:shadow-[0_14px_34px_-18px_rgb(38_61_48/0.35)]"
+      >
+        {p.image ? (
+          <span className="relative block aspect-[4/3] w-full overflow-hidden bg-(--m-line)">
+            <Photo
+              image={p.image}
+              sizes="(min-width: 1024px) 280px, 45vw"
+              className="absolute inset-0 size-full transition-transform duration-500 ease-(--ease-out) [@media(hover:hover)]:group-hover:scale-[1.04]"
+            />
+          </span>
+        ) : null}
+        <span className="flex min-w-0 flex-1 flex-col p-4">
+          <span className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
+            <span className="text-[1.05rem] leading-tight font-semibold">{p.nom}</span>
+            <Price cents={p.prixCentimes} devise={devise} className="mt-0.5 text-[1rem] sm:mt-0" />
+          </span>
+          {p.description ? <span className="mt-1 line-clamp-2 text-[14px] leading-snug opacity-75">{p.description}</span> : null}
+          <Tags p={p} />
+          <span className="sr-only">. Voir le détail</span>
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function CategorySection({ c, devise, onOpen }: { c: MenuCategory; devise: string; onOpen: (p: MenuProduct) => void }) {
   const grid = layout(c.produits.length);
   return (
@@ -216,6 +261,7 @@ export function MenuView({ data, preview }: { data: MenuData; preview?: boolean 
   const hours = groupHours(data.horaires);
   const title = a.titre || data.restaurant.nom;
   const lead = a.texte2 || data.restaurant.description;
+  const coups = highlights(data.categories);
 
   // Catégorie visible : suivie par IntersectionObserver, sans écouteur de défilement.
   useEffect(() => {
@@ -258,56 +304,87 @@ export function MenuView({ data, preview }: { data: MenuData; preview?: boolean 
                 {data.etat.libelle}
               </span>
             ) : null}
+            <a href="#infos" className="press inline-flex items-center gap-1 rounded-lg px-1 py-1 whitespace-nowrap">
+              Notre restaurant <CaretRight size={14} aria-hidden />
+            </a>
             <LanguageSwitch content={{ current: data.langue, langs: data.langues.map((l) => l.id) }} />
           </div>
         </div>
       </header>
 
       <main id="haut">
-        <section className="mx-auto grid max-w-6xl items-center gap-6 px-4 pt-6 pb-8 sm:px-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-12 md:pt-12 md:pb-14">
-          <div className="order-2 animate-rise md:order-1">
+        <section className="mx-auto max-w-5xl px-4 pt-6 pb-10 text-center sm:px-6 md:pt-12">
+          <div className="animate-rise">
             {data.restaurant.sousTitre ? <p className="eyebrow text-(--m-text) opacity-70">{data.restaurant.sousTitre}</p> : null}
-            <h1 className="mt-3 text-[2.5rem] leading-[1.06] font-bold tracking-[-0.03em] text-balance text-(--m-text) sm:text-[3.4rem] lg:text-[4rem]">{title}</h1>
-            {lead ? <p className="mt-3 max-w-[38ch] text-[1.15rem] leading-snug opacity-80 sm:text-[1.3rem]">{lead}</p> : null}
+            <h1 className="mx-auto mt-3 max-w-[20ch] text-[2.5rem] leading-[1.06] font-bold tracking-[-0.03em] text-balance text-(--m-text) sm:text-[3.4rem] lg:text-[4rem]">{title}</h1>
+            <p aria-hidden className="mx-auto mt-5 flex w-full max-w-80 items-center gap-4">
+              <span className="h-px flex-1 bg-(--m-line)" />
+              <Plant size={20} weight="fill" className="text-(--m-primary)" />
+              <span className="h-px flex-1 bg-(--m-line)" />
+            </p>
+            {lead ? <p className="mx-auto mt-5 max-w-[46ch] text-[1.15rem] leading-snug text-pretty opacity-80 sm:text-[1.3rem]">{lead}</p> : null}
+          </div>
+
+          {a.banniere ? (
+            <Photo
+              image={a.banniere}
+              priority
+              sizes="(min-width: 1024px) 960px, calc(100vw - 32px)"
+              className="mt-8 aspect-[16/11] w-full rounded-3xl sm:aspect-[16/9] lg:aspect-[2.6/1]"
+            />
+          ) : null}
+
+          <div className="mx-auto mt-8 flex max-w-[26rem] flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:justify-center">
             {data.categories.length > 0 ? (
-              <div className="mt-6 flex flex-wrap gap-3">
-                <a href="#carte" className="press inline-flex h-12 items-center gap-2 rounded-full bg-(--m-primary) px-6 text-[17px] font-medium text-white">
-                  Voir la carte <ArrowDown size={18} aria-hidden />
-                </a>
-                <a href="#infos" className="press inline-flex h-12 items-center rounded-full border border-(--m-line) bg-white px-6 text-[17px]">
-                  Horaires et accès
-                </a>
-              </div>
+              <a href="#carte" className="press inline-flex h-12 items-center justify-center gap-2 rounded-full bg-(--m-primary) px-7 text-[17px] font-medium text-white sm:min-w-52">
+                Découvrir la carte <ArrowDown size={18} aria-hidden />
+              </a>
             ) : null}
             {preview ? null : (
-              <div className="mt-3">
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  <a href="/table" className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-6 text-[17px]">
-                    <PicnicTable size={22} aria-hidden /> Choisir ma table
-                  </a>
-                  <button type="button" onClick={() => setScan(true)} className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-6 text-[17px] lg:hidden">
-                    <QrCode size={22} aria-hidden /> Scanner le QR de ma table
-                  </button>
-                </div>
-                <p className="mt-3 flex items-center gap-3 text-[15px]">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-(--m-primary)">
-                    <Plant size={18} aria-hidden />
-                  </span>
-                  <span>
-                    <span className="block font-medium">Sans inscription</span>
-                    <span className="opacity-75">Simple, rapide et pour tous à la table.</span>
-                  </span>
-                </p>
-              </div>
+              <>
+                <a href="/table" className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-7 text-[17px]">
+                  <PicnicTable size={22} aria-hidden /> Choisir ma table
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setScan(true)}
+                  className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-7 text-[17px] lg:hidden"
+                >
+                  <QrCode size={22} aria-hidden /> Scanner le QR de ma table
+                </button>
+              </>
             )}
           </div>
-          {a.banniere ? (
-            <div className="order-1 md:order-2">
-              <Photo image={a.banniere} priority sizes="(min-width: 1152px) 600px, (min-width: 768px) 52vw, calc(100vw - 32px)" className="aspect-[16/10] w-full rounded-3xl md:aspect-[5/4]" />
-            </div>
-          ) : null}
+
+          {preview ? null : (
+            <p className="mx-auto mt-6 flex max-w-[26rem] items-center gap-3 text-left text-[15px] sm:max-w-none sm:justify-center">
+              <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-(--m-primary)">
+                <Plant size={18} />
+              </span>
+              <span>
+                <span className="block font-medium">Sans inscription</span>
+                <span className="opacity-75">Simple, rapide et pour tous à la table.</span>
+              </span>
+            </p>
+          )}
         </section>
 
+        {coups.length > 0 ? (
+          <section aria-labelledby="titre-coups" className="mx-auto max-w-6xl px-4 pb-6 sm:px-6">
+            <div className="flex items-center gap-4">
+              <h2 id="titre-coups" className="text-[1.7rem] leading-tight font-bold tracking-[-0.02em] text-(--m-text) sm:text-[2.1rem]">
+                Nos coups de cœur
+              </h2>
+              <span aria-hidden className="h-px flex-1 bg-(--m-line)" />
+            </div>
+            <p className="mt-1 text-[16.5px] opacity-75">Une sélection de nos plats à ne pas manquer.</p>
+            <ul className="mt-5 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+              {coups.map((p) => (
+                <HighlightCard key={p.id} p={p} devise={data.restaurant.devise} onOpen={() => setOpen(p)} />
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {data.categories.length === 0 ? (
           <section className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6">

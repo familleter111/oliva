@@ -178,7 +178,7 @@ Ce stockage convient à un restaurant, pas à une plateforme.
 
 ## Commande depuis la table
 
-La carte est visible par tous sur `/`, sans rien demander. Pour commander, le client rejoint une table par l'un des deux chemins, et aucun compte n'est créé :
+La carte est visible par tous sur `/`, sans rien demander. L'accueil annonce le restaurant, met en avant quelques plats de la carte publiée (« Nos coups de cœur » : le premier plat disponible de chaque catégorie, au plus quatre), puis déroule la carte entière. Pour commander, le client rejoint une table par l'un des deux chemins, et aucun compte n'est créé :
 
 - **Le QR code de la table**, qui ouvre `/table/[tableId]`.
 - **« Choisir ma table » depuis l'accueil**, qui ouvre la liste des tables en service, puis la même page.

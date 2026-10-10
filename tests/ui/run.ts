@@ -592,9 +592,9 @@ async function walkthrough(admin: Page, staff: Page, visitor: Page, context: Bro
   await step(visitor, "changement de langue", async () => {
     await click(visitor, "button", "en", { exact: true });
     await hasText(visitor, `Together at the table ${stamp}`);
-    await hasText(visitor, "Opening hours and access");
+    await hasText(visitor, "Our restaurant");
     await click(visitor, "button", "fr", { exact: true });
-    await hasText(visitor, "Horaires et accès");
+    await hasText(visitor, "Notre restaurant");
   });
   await step(visitor, "navigation par catégorie, sans défilement spontané au chargement", async () => {
     await visitor.setViewport({ width: 360, height: 640, isMobile: true, hasTouch: true });

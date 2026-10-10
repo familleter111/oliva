@@ -2633,5 +2633,8 @@
  "Demande d'accès refusée": "Access request refused",
  "Cette table est archivée.": "This table is archived.",
  "QR code remplacé": "QR code replaced",
- "la colonne « {} » manque dans la table « {} ».": "the column \"{}\" is missing from table \"{}\"."
+ "la colonne « {} » manque dans la table « {} ».": "the column \"{}\" is missing from table \"{}\".",
+ "Notre restaurant": "Our restaurant",
+ "Nos coups de cœur": "Our favourites",
+ "Une sélection de nos plats à ne pas manquer.": "A selection of dishes not to be missed."
 }
