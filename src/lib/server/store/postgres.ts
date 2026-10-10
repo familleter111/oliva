@@ -22,6 +22,21 @@ export function postgresConfigured(): boolean {
   return databaseUrl() !== "";
 }
 
+/**
+ * Retire `sslmode` et `channel_binding` de l'adresse : le chiffrement est décidé juste en dessous,
+ * par l'option `ssl`. Évite l'avertissement du pilote sur le sens changeant de ces paramètres.
+ */
+function sansSsl(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    u.searchParams.delete("channel_binding");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 interface PgState {
   pool: Pool;
   url: string;
@@ -40,7 +55,7 @@ async function pool(): Promise<Pool> {
   if (!holder.__olivaPg) {
     const { Pool: PgPool } = await import("pg");
     const p = new PgPool({
-      connectionString: url,
+      connectionString: sansSsl(url),
       // Plusieurs instances sans serveur ouvrent chacune peu de connexions : le reste passe par le pooler.
       max: 3,
       idleTimeoutMillis: 10_000,

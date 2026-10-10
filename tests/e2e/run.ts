@@ -13,7 +13,8 @@ const PORT = 3211;
 const PORT_B = 3212;
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = { email: "admin@oliva.test", password: "E2e-Motdepasse-2026" };
-const ENV = { ...process.env, NODE_ENV: "production", OLIVA_STORAGE_DIR: DIR, OLIVA_SECRET: "e2e-secret-e2e-secret-e2e-secret-e2e-secret-0123456789", OLIVA_PUBLIC_URL: "", OLIVA_ADMIN_EMAIL: ADMIN.email, OLIVA_ADMIN_PASSWORD: ADMIN.password, OLIVA_ADMIN_NAME: "Admin Test" } as NodeJS.ProcessEnv;
+// Les variables de stockage distant sont neutralisées : une suite de tests n'écrit jamais dans une vraie base.
+const ENV = { ...process.env, NODE_ENV: "production", OLIVA_STORAGE_DIR: DIR, OLIVA_SECRET: "e2e-secret-e2e-secret-e2e-secret-e2e-secret-0123456789", OLIVA_PUBLIC_URL: "", OLIVA_ADMIN_EMAIL: ADMIN.email, OLIVA_ADMIN_PASSWORD: ADMIN.password, OLIVA_ADMIN_NAME: "Admin Test", OLIVA_DATABASE_URL: "", DATABASE_URL: "", POSTGRES_URL: "", BLOB_READ_WRITE_TOKEN: "" } as NodeJS.ProcessEnv;
 
 let passed = 0;
 const failures: string[] = [];
