@@ -6,6 +6,7 @@ import { fullName, must } from "../db-utils";
 import { AppError, conflit, invalide } from "../errors";
 import type { Db, Row } from "../schema";
 import { transaction, type Actor } from "../storage";
+import { qrAccepte, seatOf } from "./access";
 import { BILL_MOTIF, upsertBill } from "./bill";
 import { price, sessionAccess } from "./cart";
 import { openingState } from "./menu";
@@ -39,9 +40,10 @@ export function thumbs(db: Db): (produitId: string) => string | null {
 }
 
 /** Écran d'accueil d'une table : ne révèle ni code, ni panier, ni commande. */
-export function tableGate(db: Db, tableId: string, jeton: string | undefined): TableGate | null {
+export function tableGate(db: Db, tableId: string, jeton: string | undefined, qr?: string): TableGate | null {
   const table = db.Tables.find((t) => t.id === tableId && t.active && !t.archiveeLe);
   if (!table) return null;
+  const demande = seatOf(db, tableId, jeton);
   const session = db.SessionsTable.find((s) => s.tableId === tableId && s.statut === "ouverte");
   const regle = db.ReglesAccesTable.find((r) => r.id === ID.acces)?.politique;
   const params = db.ParametresCommandes.find((p) => p.id === ID.commandes);
@@ -58,6 +60,8 @@ export function tableGate(db: Db, tableId: string, jeton: string | undefined): T
     politique: POLITIQUES.find((p) => p === regle) ?? "code_session",
     pseudo: !params?.pseudoActif ? "aucun" : params.pseudoMode === "obligatoire" ? "obligatoire" : "optionnel",
     enAttente: participant?.statut === "en_attente",
+    demande: demande?.statut === "en_attente" ? "en_attente" : demande?.statut === "refusee" ? "refusee" : "aucune",
+    qrPerime: !qrAccepte(table, qr),
     termine,
     banniere: banniere ? `/media/${banniere.fichier}` : null,
   };

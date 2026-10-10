@@ -133,7 +133,7 @@ async function main() {
 
       const table = (n: number, zoneId: string, capacite: number, serveurId: string) => {
         const id = tx.id("tbl");
-        db.Tables.push({ id, nom: `Table ${String(n).padStart(2, "0")}`, zoneId, capacite, active: true, serveurId, couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now });
+        db.Tables.push({ id, nom: `Table ${String(n).padStart(2, "0")}`, zoneId, capacite, active: true, serveurId, couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now });
         return id;
       };
       const obj = (zoneId: string, type: string, x: number, y: number, largeur: number, hauteur: number, extra: { tableId?: string; libelle?: string; rotation?: number } = {}) =>

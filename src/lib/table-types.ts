@@ -94,6 +94,15 @@ export interface TableState {
 }
 
 /** Ce que voit une personne qui n'a pas encore rejoint la table. */
+/** Table proposée au public sur l'écran de choix de table. */
+export interface PublicTable {
+  id: string;
+  nom: string;
+  zone: string;
+  capacite: number;
+  occupee: boolean;
+}
+
 export interface TableGate {
   table: { id: string; nom: string };
   restaurant: string;
@@ -102,6 +111,10 @@ export interface TableGate {
   pseudo: "aucun" | "optionnel" | "obligatoire";
   /** Présent quand la personne a déjà demandé à rejoindre et attend la validation du personnel. */
   enAttente: boolean;
+  /** Demande d'accès déposée depuis cet appareil, avant toute session : « aucune » tant qu'il n'y en a pas. */
+  demande: "aucune" | "en_attente" | "refusee";
+  /** Vrai quand le QR code scanné a été remplacé par le personnel. */
+  qrPerime: boolean;
   /** Vrai quand cet appareil participait à une session de cette table que le personnel a clôturée. */
   termine: boolean;
   banniere: string | null;

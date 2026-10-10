@@ -1,7 +1,7 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { AppError } from "./errors";
-import { SCHEMA_VERSION, SHEETS, SHEET_SINCE, columnsOf, type AnyRow, type Db, type Meta, type SheetName } from "./schema";
+import { COLUMN_SINCE, SCHEMA_VERSION, SHEETS, SHEET_SINCE, columnsOf, type AnyRow, type Db, type Meta, type SheetName } from "./schema";
 
 /** Limite d'Excel : 32 767 caractères par cellule. Marge conservée. */
 export const MAX_CELL = 32000;
@@ -187,7 +187,10 @@ export async function decodeWorkbook(buf: Buffer): Promise<Db> {
       if (h !== null) index.set(String(h).trim(), c);
     });
     for (const k of Object.keys(cols)) {
-      if (!index.has(k)) throw invalid(`la colonne « ${k} » manque dans la feuille « ${name} ».`);
+      // Une colonne ajoutée après l'écriture du classeur est simplement absente : elle prendra sa valeur par défaut.
+      if (!index.has(k) && (COLUMN_SINCE[name]?.[k] ?? 1) <= schemaVersion) {
+        throw invalid(`la colonne « ${k} » manque dans la feuille « ${name} ».`);
+      }
     }
     const rows: AnyRow[] = [];
     ws.eachRow((row, n) => {
@@ -195,7 +198,8 @@ export async function decodeWorkbook(buf: Buffer): Promise<Db> {
       const out: Record<string, unknown> = {};
       for (const [k, t] of Object.entries(cols)) {
         const where = `${name}!${k} (ligne ${n})`;
-        out[k] = fromCell(t, plain(row.getCell(index.get(k)!).value, where), where);
+        const c = index.get(k);
+        out[k] = c === undefined ? defautJson(t) : fromCell(t, plain(row.getCell(c).value, where), where);
       }
       if (!out.id) throw invalid(`identifiant manquant dans « ${name} » (ligne ${n}).`);
       rows.push(out as AnyRow);
@@ -303,7 +307,12 @@ export function decodeJsonDb(texte: string): Db {
       const out: Record<string, unknown> = {};
       for (const [k, t] of Object.entries(cols)) {
         const where = `${name}!${k} (ligne ${i + 2})`;
-        out[k] = row[k] === undefined ? defautJson(t) : checkJson(t, row[k], where);
+        if (row[k] === undefined) {
+          if ((COLUMN_SINCE[name]?.[k] ?? 1) <= schemaVersion) throw invalid(`la colonne « ${k} » manque dans la table « ${name} ».`);
+          out[k] = defautJson(t);
+          continue;
+        }
+        out[k] = checkJson(t, row[k], where);
       }
       if (!out.id) throw invalid(`identifiant manquant dans « ${name} » (ligne ${i + 2}).`);
       return out as AnyRow;

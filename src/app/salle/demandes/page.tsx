@@ -2,7 +2,8 @@ import { Plant } from "@phosphor-icons/react/dist/ssr";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
 import { requireStaffPage } from "@/lib/server/auth/session";
-import { requestList } from "@/lib/server/services/salle";
+import { SeatRequests } from "@/components/staff/seats";
+import { requestList, seatsOf } from "@/lib/server/services/salle";
 import { readDb } from "@/lib/server/storage";
 import { RequestBoard } from "./board";
 
@@ -27,6 +28,11 @@ export default async function Page() {
           </div>
         }
       />
+      {seatsOf(db, auth).length > 0 ? (
+        <div className="mb-6">
+          <SeatRequests demandes={seatsOf(db, auth)} espace="salle" fuseau={db.Restaurant[0]?.fuseauHoraire || "Europe/Paris"} />
+        </div>
+      ) : null}
       <RequestBoard demandes={requestList(db, auth)} fuseau={db.Restaurant[0]?.fuseauHoraire || "Europe/Paris"} />
     </>
   );

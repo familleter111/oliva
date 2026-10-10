@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Clock, CookingPot, EnvelopeSimple, ForkKnife, Leaf, MapPin, Pepper, Phone, Plant, QrCode, Tag, Timer, X } from "@phosphor-icons/react/dist/ssr";
+import { ArrowDown, Clock, CookingPot, EnvelopeSimple, ForkKnife, Leaf, MapPin, Pepper, Phone, PicnicTable, Plant, QrCode, Tag, Timer, X } from "@phosphor-icons/react/dist/ssr";
 import { Dialog } from "radix-ui";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { BackButton } from "@/components/back-button";
@@ -280,10 +280,15 @@ export function MenuView({ data, preview }: { data: MenuData; preview?: boolean 
               </div>
             ) : null}
             {preview ? null : (
-              <div className="mt-3 lg:hidden">
-                <button type="button" onClick={() => setScan(true)} className="press inline-flex h-12 w-full items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-6 text-[17px] sm:w-auto">
-                  <QrCode size={22} aria-hidden /> Scanner le QR de ma table
-                </button>
+              <div className="mt-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <a href="/table" className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-6 text-[17px]">
+                    <PicnicTable size={22} aria-hidden /> Choisir ma table
+                  </a>
+                  <button type="button" onClick={() => setScan(true)} className="press inline-flex h-12 items-center justify-center gap-3 rounded-full border border-(--m-line) bg-white px-6 text-[17px] lg:hidden">
+                    <QrCode size={22} aria-hidden /> Scanner le QR de ma table
+                  </button>
+                </div>
                 <p className="mt-3 flex items-center gap-3 text-[15px]">
                   <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-(--m-primary)">
                     <Plant size={18} aria-hidden />
@@ -408,9 +413,9 @@ export function MenuView({ data, preview }: { data: MenuData; preview?: boolean 
             </Dialog.Close>
             <QrCode size={40} aria-hidden className="text-(--m-primary)" />
             <Dialog.Title className="mt-3 text-[1.6rem] leading-tight font-semibold">Commander depuis votre table</Dialog.Title>
-            <Dialog.Description className="mt-1 text-[16px] opacity-80">Le QR code posé sur votre table ouvre le panier partagé.</Dialog.Description>
+            <Dialog.Description className="mt-1 text-[16px] opacity-80">Le QR code posé sur votre table ouvre le panier partagé. Sans QR code sous la main, choisissez votre table depuis cette page.</Dialog.Description>
             <ol className="mt-4 grid gap-3 text-[16px]">
-              {["Ouvrez l'appareil photo de votre téléphone.", "Visez le QR code de votre table, puis touchez le lien qui s'affiche.", "Saisissez le code donné par notre équipe."].map((step, i) => (
+              {["Ouvrez l'appareil photo de votre téléphone.", "Visez le QR code de votre table, puis touchez le lien qui s'affiche.", "Indiquez votre prénom : notre équipe vient vous confirmer, puis la carte s'ouvre."].map((step, i) => (
                 <li key={step} className="flex items-start gap-3">
                   <span className="num grid size-7 shrink-0 place-items-center rounded-full bg-(--m-primary) font-sans text-[13px] font-semibold text-white">{i + 1}</span>
                   {step}

@@ -5,7 +5,7 @@ import "server-only";
  * Une feuille par entité, une colonne par champ. Les montants sont en centimes entiers,
  * les dates en ISO 8601 UTC (texte), les listes d'identifiants et objets en JSON (texte).
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 type T = "string" | "int" | "int?" | "bool" | "date" | "ids" | "json";
 
@@ -28,7 +28,7 @@ const defs = {
   Permissions: { id: "string", roleId: "string", permission: "string", portee: "string" },
   SessionsPersonnel: { id: "string", utilisateurId: "string", jetonHash: "string", creeLe: "date", vueLe: "date", expireLe: "date", revoqueeLe: "date", navigateur: "string", ip: "string" },
   Zones: { id: "string", nom: "string", icone: "string", ordre: "int", active: "bool" },
-  Tables: { id: "string", nom: "string", zoneId: "string", capacite: "int", active: "bool", serveurId: "string", couleur: "string", archiveeLe: "date", creeLe: "date", majLe: "date" },
+  Tables: { id: "string", nom: "string", zoneId: "string", capacite: "int", active: "bool", serveurId: "string", couleur: "string", qrJeton: "string", archiveeLe: "date", creeLe: "date", majLe: "date" },
   ObjetsPlan: { id: "string", zoneId: "string", type: "string", tableId: "string", libelle: "string", x: "int", y: "int", largeur: "int", hauteur: "int", rotation: "int", ordre: "int" },
   ReglesAccesTable: { id: "string", politique: "string", validiteCode: "string", wifi: "string", majLe: "date" },
   SessionsTable: { id: "string", tableId: "string", statut: "string", code: "string", ouverteLe: "date", ouvertePar: "string", fermeeLe: "date", fermeePar: "string" },
@@ -38,6 +38,7 @@ const defs = {
   Commandes: { id: "string", sessionId: "string", tableId: "string", numero: "int", statut: "string", totalCentimes: "int", devise: "string", creeLe: "date", creePar: "string" },
   LignesCommande: { id: "string", commandeId: "string", produitId: "string", nom: "string", description: "string", prixUnitaireCentimes: "int", quantite: "int", options: "json", instructions: "string", totalCentimes: "int", stationId: "string" },
   DemandesClient: { id: "string", sessionId: "string", tableId: "string", participantId: "string", motifId: "string", libelle: "string", message: "string", statut: "string", creeLe: "date", traiteeLe: "date", traiteePar: "string" },
+  DemandesAcces: { id: "string", tableId: "string", pseudo: "string", jetonHash: "string", statut: "string", origine: "string", creeLe: "date", traiteeLe: "date", traiteePar: "string", sessionId: "string", participantId: "string" },
   AdditionsTable: { id: "string", sessionId: "string", tableId: "string", statut: "string", commandesCentimes: "int", serviceCentimes: "int", totalCentimes: "int", demandeeLe: "date", demandeePar: "string", remiseLe: "date", remisePar: "string", clotureeLe: "date" },
   StationsPreparation: { id: "string", nom: "string", icone: "string", utilisateurIds: "ids", notifierServeur: "bool", ordre: "int" },
   StatutsCommande: { id: "string", nom: "string", couleur: "string", visibleClient: "bool", creation: "string", acteur: "string", ordre: "int", systeme: "bool" },
@@ -61,7 +62,10 @@ export type SheetName = keyof typeof defs;
  * Feuilles apparues après la version 1 du schéma. Un classeur plus ancien est lu tel quel : la feuille
  * manquante est considérée comme vide, puis créée à la prochaine écriture. Aucune donnée n'est touchée.
  */
-export const SHEET_SINCE: Partial<Record<SheetName, number>> = { DemandesClient: 2, AdditionsTable: 3 };
+export const SHEET_SINCE: Partial<Record<SheetName, number>> = { DemandesClient: 2, AdditionsTable: 3, DemandesAcces: 4 };
+
+/** Colonnes ajoutées après coup : absentes d'un enregistrement plus ancien, elles prennent leur valeur par défaut. */
+export const COLUMN_SINCE: Partial<Record<SheetName, Record<string, number>>> = { Tables: { qrJeton: 4 } };
 export const SHEETS = Object.keys(defs) as SheetName[];
 export const columnsOf = (s: SheetName): Record<string, T> => defs[s];
 
@@ -121,6 +125,7 @@ export const SENSITIVE: Partial<Record<SheetName, string[]>> = {
   Utilisateurs: ["motDePasseHash", "jetonHash"],
   SessionsPersonnel: ["jetonHash"],
   Participants: ["jetonHash"],
+  DemandesAcces: ["jetonHash"],
 };
 
 type Mode = "restrict" | "nullify" | "cascade";
@@ -162,6 +167,7 @@ export const RELATIONS: Relation[] = [
   r("LignesPanier", "produitId", "Produits", "cascade"),
   r("LignesCommande", "commandeId", "Commandes", "cascade"),
   r("DemandesClient", "sessionId", "SessionsTable", "cascade"),
+  r("DemandesAcces", "tableId", "Tables", "cascade"),
   r("AdditionsTable", "sessionId", "SessionsTable", "cascade"),
   r("StationsPreparation", "utilisateurIds", "Utilisateurs", "nullify"),
   r("Equipements", "stationId", "StationsPreparation", "nullify"),
@@ -199,6 +205,7 @@ export const SHEET_LABEL: Record<SheetName, string> = {
   Commandes: "Commande",
   LignesCommande: "Ligne de commande",
   DemandesClient: "Demande client",
+  DemandesAcces: "Demande d'accès",
   AdditionsTable: "Addition de table",
   StationsPreparation: "Station",
   StatutsCommande: "Statut de commande",

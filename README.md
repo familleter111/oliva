@@ -44,7 +44,7 @@ Il n'existe aucun mot de passe par défaut, et aucune commande ne réinitialise 
 | `npm run storage:restaurer -- <fichier.xlsx>` | Remet en place un classeur, application arrêtée |
 | `npm run i18n:verifier` | Liste les textes de l'interface absents du dictionnaire anglais |
 | `npm run typecheck` | Vérification TypeScript |
-| `npm test` | Tests unitaires et d'intégration du stockage (87) |
+| `npm test` | Tests unitaires et d'intégration du stockage (93) |
 | `npm run test:e2e` | Tests HTTP sur le serveur de production (114), après `npm run build` |
 | `npm run test:ui` | Parcours dans Chrome, audit d'accessibilité, traduction et débordements, après `npm run build` |
 
@@ -96,7 +96,7 @@ tests/                        unit, e2e, ui
 
 ```
 storage/
-  data/oliva.xlsx             classeur principal (43 feuilles typées et une feuille _Meta)
+  data/oliva.xlsx             classeur principal (44 feuilles typées et une feuille _Meta)
   data/oliva.precedent.xlsx   copie de l'état précédant la dernière écriture
   data/oliva.lock             verrou de l'instance qui écrit
   data/archives/              historique ancien, au-delà de 5 000 lignes
@@ -109,11 +109,11 @@ Le dossier est hors de `public/` et aucune route ne sert un fichier `.xlsx`. Les
 
 Conventions du classeur : montants en centimes entiers, dates au format ISO en texte, identifiants stables, listes en JSON. Les mots de passe n'y figurent que sous forme d'empreintes scrypt, les jetons sous forme d'empreintes HMAC.
 
-Mise à niveau : un enregistrement créé par une version précédente est lu tel quel. Les feuilles ajoutées depuis (les demandes des clients en version 2, les additions de table en version 3) sont considérées comme vides, puis créées à la prochaine écriture. Le fichier n'est réécrit qu'au moment d'une vraie sauvegarde, et aucune donnée existante n'est modifiée.
+Mise à niveau : un enregistrement créé par une version précédente est lu tel quel. Les feuilles ajoutées depuis (les demandes des clients en version 2, les additions de table en version 3, les demandes d'accès en version 4) sont considérées comme vides, et une colonne ajoutée depuis (le jeton de QR code des tables, en version 4) prend sa valeur par défaut. Le fichier n'est réécrit qu'au moment d'une vraie sauvegarde, et aucune donnée existante n'est modifiée.
 
 ### Les deux stockages
 
-Le modèle de données ne change pas d'un stockage à l'autre : les mêmes 43 feuilles, les mêmes colonnes, les mêmes contrôles.
+Le modèle de données ne change pas d'un stockage à l'autre : les mêmes 44 feuilles, les mêmes colonnes, les mêmes contrôles.
 
 | | Disque | Base de données |
 | --- | --- | --- |
@@ -178,10 +178,17 @@ Ce stockage convient à un restaurant, pas à une plateforme.
 
 ## Commande depuis la table
 
-Le client lit le QR code de sa table et arrive sur `/table/[tableId]`. Aucun compte n'est créé.
+La carte est visible par tous sur `/`, sans rien demander. Pour commander, le client rejoint une table par l'un des deux chemins, et aucun compte n'est créé :
 
-1. Le personnel ouvre une session pour la table (QR & sessions, onglet Sessions). Un code à quatre chiffres est généré.
-2. Le client saisit ce code, et son prénom si le restaurant le demande. Le serveur lui remet un jeton aléatoire dans un cookie `HttpOnly`, `SameSite=Lax`, `Secure` en production. Selon la politique choisie dans l'administration, l'accès peut aussi passer par une validation du personnel ou être direct.
+- **Le QR code de la table**, qui ouvre `/table/[tableId]`.
+- **« Choisir ma table » depuis l'accueil**, qui ouvre la liste des tables en service, puis la même page.
+
+Dans les deux cas, le client annonce son prénom et demande la table. Le personnel le reconnaît de vive voix, puis l'installe depuis son espace : la session de la table s'ouvre si besoin, et le jeton déjà remis au client devient celui de son participant. Tant que personne n'a confirmé, la demande n'ouvre aucun droit : ni panier, ni commande, ni nom de convive. Une demande oubliée expire au bout de deux heures.
+
+Le code à quatre chiffres reste disponible pour les restaurants qui le préfèrent (politique « code de session ») : le client peut toujours saisir le code, ou prévenir l'équipe s'il ne l'a pas.
+
+1. Le personnel ouvre une session pour la table (QR & sessions, onglet Sessions), ou laisse la première arrivée l'ouvrir.
+2. Le client saisit le code s'il en a un, et son prénom si le restaurant le demande. Le serveur lui remet un jeton aléatoire dans un cookie `HttpOnly`, `SameSite=Lax`, `Secure` en production.
 3. Toute la table partage un seul panier, mis à jour en direct sur chaque appareil. Chacun ajoute des plats, choisit ses options, précise une instruction.
 4. L'envoi en cuisine fige la commande : libellés, options et prix. Les commandes envoyées ne sont plus modifiables par les clients.
 5. Le client suit l'avancement, consulte l'addition, estime un partage à parts égales et peut appeler l'équipe ou demander l'addition.
@@ -191,9 +198,10 @@ Le client lit le QR code de sa table et arrive sur `/table/[tableId]`. Aucun com
 Garanties tenues par le serveur :
 
 - Sans jeton valide, la page d'une table ne montre que l'écran d'accueil : ni code, ni panier, ni commande, ni nom de convive.
+- La liste publique des tables ne donne que leur nom, leur zone, leur capacité et le fait qu'un service soit en cours. Choisir une table n'accorde rien.
 - Le navigateur n'envoie jamais de prix. Chaque montant est recalculé à partir de la carte publiée.
 - Chaque opération passe par une transaction du stockage. Une clé d'idempotence empêche une commande de partir deux fois, même en cas de double clic ou de confirmations simultanées.
-- Les essais de code sont limités par adresse et par table, avec blocage temporaire. Le compteur est en mémoire.
+- Les essais de code sont limités par adresse et par table, avec blocage temporaire. Le compteur est en mémoire. Les demandes d'accès sont limitées de la même façon, et une table n'accepte pas plus de douze demandes en attente.
 - Les requêtes d'écriture venant d'une autre origine sont refusées.
 
 Sur téléphone et tablette, le parcours client a ses propres écrans : barre d'onglets Menu / Panier / Commandes / Service, fiche de plat en deux étapes, filtres en feuille, écran « C'est envoyé ». Si le réseau se coupe pendant l'envoi, un écran de vérification reprend la même clé d'idempotence : la commande ne part jamais deux fois.
@@ -242,6 +250,14 @@ Un sélecteur FR / EN est présent sur toutes les pages. Le choix est gardé dan
 - Les contenus saisis par le restaurant (noms de plats, descriptions) ne sont pas dans le dictionnaire, à l'exception de la carte de démonstration. Pour les afficher en anglais, ajoutez la langue dans Apparence puis renseignez « Textes à traduire » : la carte publique utilise ces traductions quand le visiteur choisit EN.
 - À défaut, sur les navigateurs qui proposent un traducteur intégré (Chrome sur ordinateur), les phrases restantes lui sont confiées, sur l'appareil du visiteur. Ailleurs, elles restent en français.
 - Les dates et les montants gardent le format français.
+
+## QR codes des tables
+
+Le QR code d'une table encode `https://votre-domaine/table/<identifiant>`, avec le jeton `k` de l'affichette en cours. Il identifie la table : il n'autorise rien par lui-même.
+
+- L'administration (**QR & sessions**) affiche le QR code de chaque table, son adresse, et une page d'impression pour toute la salle.
+- Le serveur et le responsable de salle peuvent **remplacer le QR code** d'une table depuis leur espace, quand une affichette est abîmée, perdue ou remplacée. Les anciennes affichettes affichent alors « Ce QR code a été remplacé » et proposent de choisir sa table depuis la carte.
+- Une table dont le QR code n'a jamais été remplacé accepte toutes les affichettes, y compris celles imprimées avant cette fonction.
 
 ## Images
 
@@ -341,7 +357,7 @@ L'ancien classeur est conservé à côté, rien n'est supprimé.
 
 ## Tests
 
-- `npm test` : stockage (persistance après redémarrage, écritures concurrentes, panne disque sans faux succès, classeur corrompu jamais remplacé, seconde instance refusée), forme JSON de la base (aller-retour fidèle, colonnes inconnues écartées, types faux refusés, mise à niveau d'un enregistrement ancien) et dépôt de fichiers, authentification et suspension, publication, panier partagé, parcours client d'une table (accueil sans fuite, instructions, demandes, statuts selon les droits, fermeture de session, mise à niveau d'un classeur de la version précédente), import et export, sauvegardes.
+- `npm test` : stockage (persistance après redémarrage, écritures concurrentes, panne disque sans faux succès, classeur corrompu jamais remplacé, seconde instance refusée), demandes d'accès à une table (aucun droit avant confirmation, session ouverte à l'acceptation, QR code remplacé), forme JSON de la base (aller-retour fidèle, colonnes inconnues écartées, types faux refusés, mise à niveau d'un enregistrement ancien) et dépôt de fichiers, authentification et suspension, publication, panier partagé, parcours client d'une table (accueil sans fuite, instructions, demandes, statuts selon les droits, fermeture de session, mise à niveau d'un classeur de la version précédente), import et export, sauvegardes.
 - `npm run test:e2e` : accès public sans connexion, refus des pages et de l'API d'administration, classeur inaccessible par URL, CSRF, permissions, envois de fichiers, import invalide sans écrasement, données intactes après redémarrage du serveur, sécurité des tables (identifiant seul refusé, mauvais code, jeton inventé, origine étrangère, prix imposé par le serveur, double confirmation, session fermée, verrouillage des essais de code).
 - `npm run test:ui` : parcours de l'administration, parcours client complet avec deux convives et l'écran de service, le même parcours sur téléphone (coupure du réseau comprise), parcours de l'espace serveur et de l'espace responsable (portée du rôle, transfert de table, attribution d'une demande, clôture d'une session), traduction en anglais, audit axe-core (WCAG 2.1 A et AA) des pages et des états ouverts, absence de débordement de 360 à 1280 px. Variante : `OLIVA_UI_ONLY=client|serveur|responsable|traduction|debordements npm run test:ui` pour ne rejouer qu'une partie.
 

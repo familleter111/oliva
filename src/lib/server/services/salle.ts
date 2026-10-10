@@ -7,6 +7,7 @@ import type { Db, Row } from "../schema";
 import { transaction } from "../storage";
 import { BILL_MOTIF, billTotals, upsertBill } from "./bill";
 import { names, thumbs } from "./table";
+import { pendingSeats, type SeatRequest } from "./access";
 
 /**
  * Espace serveur : ce qu'un membre de salle voit et peut faire pendant le service.
@@ -26,6 +27,11 @@ export interface Scope {
 }
 
 /** Tables accessibles au membre connecté. Un rôle « tables affectées » ne voit que les siennes. */
+/** Arrivées à confirmer sur les tables de la personne connectée. */
+export function seatsOf(db: Db, auth: Auth): SeatRequest[] {
+  return pendingSeats(db, scopeOf(db, auth).ids);
+}
+
 export function scopeOf(db: Db, auth: Auth): Scope {
   const vivantes = db.Tables.filter((t) => !t.archiveeLe);
   if (auth.role.portee === "toutes") return { toutes: true, ids: new Set(vivantes.map((t) => t.id)) };

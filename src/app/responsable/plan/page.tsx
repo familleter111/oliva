@@ -4,6 +4,7 @@ import Link from "next/link";
 import { TransferTable } from "@/components/responsable/actions";
 import { FloorPlan, PlanLegend, TableBadge } from "@/components/responsable/parts";
 import { Crumb } from "@/components/responsable/shell";
+import { RenewQr } from "@/components/staff/seats";
 import { hour } from "@/components/salle/parts";
 import { Card, EmptyState, PageHeader, buttonClass } from "@/components/ui";
 import { cn, formatMoney } from "@/lib/format";
@@ -95,6 +96,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ z
                 Voir la table <ArrowRight size={18} />
               </Link>
               <TransferTable table={detail.table} membres={membres} className="w-full" />
+              <RenewQr tableId={detail.table.id} espace="responsable" className="w-full" />
             </div>
 
             <section className="mt-5 border-t border-line pt-4">

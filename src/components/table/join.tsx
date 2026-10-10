@@ -75,6 +75,40 @@ function Ended({ gate, onRejoin }: { gate: TableGate; onRejoin: () => void }) {
 }
 
 /** Accueil d'une table après lecture du QR code. Le code de session est saisi par le convive, jamais prérempli. */
+/** Champ de prénom, partagé par les deux façons de rejoindre la table. */
+function PseudoField({ value, onChange, mode }: { value: string; onChange: (v: string) => void; mode: TableGate["pseudo"] }) {
+  return (
+    <div className="mx-auto mt-5 max-w-[330px] text-left">
+      <label htmlFor="pseudo" className="text-[1.05rem] text-text">
+        Votre prénom {mode === "optionnel" ? <span className="text-muted">(facultatif)</span> : null}
+      </label>
+      <input id="pseudo" value={value} maxLength={24} autoComplete="given-name" onChange={(e) => onChange(e.target.value)} placeholder="Pour vous reconnaître dans le panier" className="mt-1.5 h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[17px] placeholder:text-muted/80" />
+    </div>
+  );
+}
+
+/** QR code remplacé par le personnel : l'affichette lue n'est plus celle de la table. */
+function Replaced({ gate }: { gate: TableGate }) {
+  return (
+    <main className="grid min-h-[100dvh] place-items-center bg-paper px-5 text-center">
+      <div className="animate-rise">
+        <Logo name={gate.restaurant} className="text-[2.4rem]" />
+        <WarningCircle size={40} aria-hidden className="mx-auto mt-8 text-warn" />
+        <h1 className="mt-3 text-[2rem] leading-tight font-bold text-ink">Ce QR code a été remplacé.</h1>
+        <p className="mt-2 text-[1.1rem] text-muted">Notre équipe en a posé un nouveau sur la table. Vous pouvez aussi choisir votre table ici.</p>
+        <div className="mx-auto mt-7 flex max-w-[330px] flex-col gap-3">
+          <a href="/table" className={cn(CTA, "h-14 w-full text-[1.15rem]")}>
+            <PicnicTable size={22} aria-hidden /> Choisir ma table
+          </a>
+          <a href="/" className={SECONDARY}>
+            <ArrowLeft size={20} aria-hidden /> Voir la carte
+          </a>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export function JoinScreen({ gate }: { gate: TableGate }) {
   const router = useRouter();
   const [code, setCode] = useState<string[]>(() => Array<string>(DIGITS).fill(""));
@@ -85,12 +119,33 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const needCode = gate.politique === "code_session";
 
+  const attente = gate.enAttente || gate.demande === "en_attente";
+
   // En attente de validation par le personnel : la page se met à jour d'elle-même.
   useEffect(() => {
-    if (!gate.enAttente) return;
+    if (!attente) return;
     const timer = window.setInterval(() => router.refresh(), 4000);
     return () => window.clearInterval(timer);
-  }, [gate.enAttente, router]);
+  }, [attente, router]);
+
+  /**
+   * Demande d'accès : la personne annonce son prénom, le personnel la confirme de vive voix.
+   * Fonctionne sans code et même si aucune session n'est ouverte.
+   */
+  const askSeat = async () => {
+    if (pending) return;
+    if (gate.pseudo === "obligatoire" && !pseudo.trim()) return setError({ message: "Indiquez votre prénom pour demander la table.", code: false });
+    setPending(true);
+    setError(null);
+    try {
+      const source = new URLSearchParams(window.location.search).get("source");
+      await tableCall("POST", "acces", { tableId: gate.table.id, pseudo: pseudo.trim(), origine: source === "accueil" ? "accueil" : "qr" });
+      window.location.reload();
+    } catch (err) {
+      setError({ message: err instanceof TableError ? err.message : "Connexion au serveur impossible. Vérifiez votre réseau.", code: false });
+      setPending(false);
+    }
+  };
 
   /**
    * Saisie du code. Chaque chiffre tapé est appliqué depuis la touche, pas depuis la valeur du champ :
@@ -154,7 +209,8 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
     }
   };
 
-  if (gate.termine && !rejoin && !gate.enAttente) return <Ended gate={gate} onRejoin={() => setRejoin(true)} />;
+  if (gate.qrPerime) return <Replaced gate={gate} />;
+  if (gate.termine && !rejoin && !attente) return <Ended gate={gate} onRejoin={() => setRejoin(true)} />;
 
   return (
     <main className="min-h-[100dvh] bg-paper">
@@ -204,24 +260,43 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
           </div>
 
           <div className="mt-6 max-lg:rounded-[24px] max-lg:border max-lg:border-line max-lg:bg-white max-lg:px-5 max-lg:py-7 max-lg:shadow-card lg:mt-8">
-            {gate.enAttente ? (
+            {attente ? (
               <div role="status" className="lg:rounded-2xl lg:border lg:border-line lg:bg-white lg:px-6 lg:py-7">
                 <Hourglass size={34} aria-hidden className="mx-auto text-olive" />
                 <p className="mt-3 text-[1.4rem] font-semibold text-ink">Demande envoyée.</p>
-                <p className="mt-1 text-[1.05rem] text-muted">Notre équipe valide votre arrivée à la table. Cette page s'ouvrira d'elle-même.</p>
+                <p className="mt-1 text-[1.05rem] text-muted">Notre équipe vient vous confirmer à la table. Cette page s'ouvrira d'elle-même.</p>
               </div>
-            ) : !gate.sessionOuverte ? (
+            ) : gate.demande === "refusee" ? (
               <div className="lg:rounded-2xl lg:border lg:border-line lg:bg-white lg:px-6 lg:py-7">
-                <p className="text-[1.3rem] font-semibold text-ink">Votre table n'est pas encore ouverte.</p>
-                <p className="mt-1 text-[1.05rem] text-muted">Faites signe à notre équipe : elle ouvre la table et vous donne le code.</p>
+                <p className="text-[1.3rem] font-semibold text-ink">Votre demande n'a pas été confirmée.</p>
+                <p className="mt-1 text-[1.05rem] text-muted">Faites signe à notre équipe, puis redemandez l'accès à la table.</p>
                 <div className="mt-5 flex flex-wrap justify-center gap-2">
-                  <Button variant="secondary" size="lg" onClick={() => router.refresh()}>
-                    Réessayer
+                  <Button variant="secondary" size="lg" onClick={() => void askSeat()} disabled={pending}>
+                    Demander à nouveau
                   </Button>
                   <a href="/" className="press inline-flex h-12 items-center rounded-[10px] bg-olive px-5 text-[17px] font-medium text-white hover:bg-olive-deep">
                     Voir la carte
                   </a>
                 </div>
+              </div>
+            ) : !gate.sessionOuverte ? (
+              <div className="lg:rounded-2xl lg:border lg:border-line lg:bg-white lg:px-6 lg:py-7">
+                <p className="text-[1.3rem] font-semibold text-ink">Votre table n'est pas encore ouverte.</p>
+                <p className="mt-1 text-[1.05rem] text-muted">Annoncez-vous : notre équipe vous installe, puis la carte s'ouvre ici.</p>
+                {gate.pseudo !== "aucun" ? <PseudoField value={pseudo} onChange={setPseudo} mode={gate.pseudo} /> : null}
+                <div role="alert" className="mt-4 min-h-6">
+                  {error ? (
+                    <p className="flex items-center justify-center gap-2.5 rounded-xl bg-danger-soft px-4 py-3 text-[1.02rem] text-danger">
+                      <WarningCircle size={22} aria-hidden className="shrink-0" /> {error.message}
+                    </p>
+                  ) : null}
+                </div>
+                <button type="button" onClick={() => void askSeat()} disabled={pending} className={cn(CTA, "h-16 w-full text-[1.25rem] lg:h-[68px]")}>
+                  Demander cette table <ArrowRight size={24} aria-hidden />
+                </button>
+                <a href="/table" className={cn(SECONDARY, "mt-3")}>
+                  <PicnicTable size={20} aria-hidden /> Choisir une autre table
+                </a>
               </div>
             ) : (
               <>
@@ -261,14 +336,7 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
                   <p className="text-[1.1rem] text-muted">{gate.politique === "validation_personnel" ? "Notre équipe validera votre arrivée à la table." : "Vous pouvez rejoindre la table directement."}</p>
                 )}
 
-                {gate.pseudo !== "aucun" ? (
-                  <div className="mx-auto mt-5 max-w-[330px] text-left">
-                    <label htmlFor="pseudo" className="text-[1.05rem] text-text">
-                      Votre prénom {gate.pseudo === "optionnel" ? <span className="text-muted">(facultatif)</span> : null}
-                    </label>
-                    <input id="pseudo" value={pseudo} maxLength={24} autoComplete="given-name" onChange={(e) => setPseudo(e.target.value)} placeholder="Pour vous reconnaître dans le panier" className="mt-1.5 h-12 w-full rounded-xl border border-line-strong bg-white px-4 text-[17px] placeholder:text-muted/80" />
-                  </div>
-                ) : null}
+                {gate.pseudo !== "aucun" ? <PseudoField value={pseudo} onChange={setPseudo} mode={gate.pseudo} /> : null}
 
                 <div role="alert" className="mt-4 min-h-6">
                   {error ? (
@@ -282,6 +350,9 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
                 </div>
                 <button type="submit" disabled={!complete || pending} className={cn(CTA, "mt-3 h-16 w-full text-[1.3rem] lg:h-[68px] lg:text-[1.4rem]")}>
                   {error?.code ? "Réessayer" : "Rejoindre la table"} <ArrowRight size={24} aria-hidden />
+                </button>
+                <button type="button" onClick={() => void askSeat()} disabled={pending} className={cn(SECONDARY, "mt-3")}>
+                  <Hourglass size={20} aria-hidden /> {needCode ? "Je n'ai pas le code : prévenir l'équipe" : "Prévenir l'équipe de mon arrivée"}
                 </button>
                 {error?.code ? (
                   <a href="/" className={cn(SECONDARY, "mt-3 lg:hidden")}>

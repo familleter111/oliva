@@ -35,6 +35,8 @@ export function proxy(req: NextRequest) {
 
   const headers = new Headers(req.headers);
   headers.set("x-nonce", nonce);
+  // Jeton du QR code : seule une page peut lire les paramètres d'adresse, or la décision se prend dans la mise en page.
+  headers.set("x-oliva-qr", req.nextUrl.searchParams.get("k") ?? "");
   headers.set("Content-Security-Policy", csp);
   const res = NextResponse.next({ request: { headers } });
   res.headers.set("Content-Security-Policy", csp);

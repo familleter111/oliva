@@ -13,7 +13,13 @@ export async function siteBase(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-export const tableUrl = (base: string, tableId: string) => `${base}/table/${tableId}`;
+/**
+ * Adresse encodée dans le QR code d'une table.
+ * Le jeton `k` dit de quelle affichette vient la personne : quand le personnel remplace le QR code,
+ * les anciennes affichettes sont reconnues comme périmées. Il n'autorise rien par lui-même.
+ */
+export const tableUrl = (base: string, table: { id: string; qrJeton: string }) =>
+  `${base}/table/${table.id}${table.qrJeton ? `?k=${encodeURIComponent(table.qrJeton)}` : ""}`;
 
 /** QR code réel (SVG) vers l'adresse de la table. Le QR identifie la table : il ne donne aucun droit à lui seul. */
 export function qrSvg(url: string): Promise<string> {

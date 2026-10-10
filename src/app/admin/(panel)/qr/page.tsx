@@ -28,7 +28,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
         const s = db.SessionsTable.find((x) => x.tableId === t.id && x.statut === "ouverte");
         return { id: t.id, nom: t.nom, zone: zones.get(t.zoneId) ?? "", capacite: t.capacite, active: t.active, session: s ? { id: s.id, code: s.code, ouverteLe: s.ouverteLe, participants: db.Participants.filter((p) => p.sessionId === s.id && p.statut === "admis").length } : null };
       })}
-      selection={current ? { id: current.id, nom: current.nom, url: tableUrl(base, current.id), svg: await qrSvg(tableUrl(base, current.id)) } : null}
+      selection={current ? { id: current.id, nom: current.nom, url: tableUrl(base, current), svg: await qrSvg(tableUrl(base, current)) } : null}
       marque={{ nom: resto?.nom || "Oliva", sousTitre: resto?.sousTitre ?? "", logo: thumbOf(db, resto?.logoMediaId ?? "") }}
       baseLocale={isLocalBase(base)}
       base={base}

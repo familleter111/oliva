@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
+import { SCHEMA_VERSION } from "@/lib/server/schema";
 import { bucket } from "@/lib/server/store/bucket";
 import { ACTOR, setup } from "./helpers";
 
@@ -57,14 +58,18 @@ describe("forme JSON de la base", () => {
   it("met à niveau un enregistrement écrit par une version plus ancienne", async () => {
     const db = await s.readDb();
     const ancien = JSON.parse(w.encodeJsonDb(db)) as Record<string, unknown>;
-    // Version 1 du schéma : ni les demandes des clients, ni les additions de table n'existaient.
+    // Version 1 du schéma : ni les demandes des clients, ni les additions, ni les demandes d'accès n'existaient.
     (ancien._meta as Record<string, unknown>).schemaVersion = 1;
     delete ancien.DemandesClient;
     delete ancien.AdditionsTable;
+    delete ancien.DemandesAcces;
+    // La colonne du jeton de QR code est apparue en version 4 : elle manque, elle doit prendre sa valeur par défaut.
+    for (const t of ancien.Tables as Record<string, unknown>[]) delete t.qrJeton;
     const relu = w.decodeJsonDb(JSON.stringify(ancien));
-    assert.equal(relu._meta.schemaVersion, 3);
+    assert.equal(relu._meta.schemaVersion, SCHEMA_VERSION);
     assert.deepEqual(relu.DemandesClient, []);
     assert.deepEqual(relu.AdditionsTable, []);
+    assert.deepEqual(relu.DemandesAcces, [], "les tables ajoutées depuis sont vides");
     assert.equal(relu.Categories.length, db.Categories.length, "le reste des données est intact");
   });
 

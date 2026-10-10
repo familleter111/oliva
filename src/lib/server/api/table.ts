@@ -5,6 +5,7 @@ import { assertNotLocked, clearFailures, recordFailure } from "../auth/rate-limi
 import { assertSameOrigin } from "../auth/session";
 import { cookieSecure } from "../env";
 import { AppError, introuvable, isAppError } from "../errors";
+import { requestSeat } from "../services/access";
 import { addCartLine, changeCartLine, confirmCart, joinSession, removeCartLine, sessionAccess, setLineInstructions } from "../services/cart";
 import { createRequest, leaveSession, tableState } from "../services/table";
 import { onCommit, readDb } from "../storage";
@@ -61,6 +62,21 @@ const routes: Record<string, Route> = {
         if (isAppError(e) && e.code === "interdit") limits.forEach(([key, max, lock]) => recordFailure(key, max, lock));
         throw e;
       }
+    },
+  },
+  /** Demande d'accès à une table : le personnel confirmera de vive voix. Ne donne aucun droit. */
+  "POST acces": {
+    open: true,
+    input: z.object({ tableId: ref, pseudo: txt(24).optional(), origine: z.enum(["accueil", "qr"]).optional() }),
+    run: async ({ req }, input: { tableId: string; pseudo?: string; origine?: "accueil" | "qr" }) => {
+      const ip = ((req.headers.get("x-forwarded-for")?.split(",")[0] ?? req.headers.get("x-real-ip") ?? "").trim() || "local").slice(0, 60);
+      // Une même adresse ne peut pas inonder le personnel de demandes.
+      const cle = `acces:${ip}`;
+      assertNotLocked(cle);
+      recordFailure(cle, 12, 10);
+      const out = await requestSeat(input.tableId, input.pseudo ?? "", input.origine ?? "accueil");
+      (await cookies()).set(TABLE_COOKIE(), out.jeton, { httpOnly: true, sameSite: "lax", secure: cookieSecure(), path: "/", maxAge: COOKIE_MAX_AGE });
+      return { statut: out.statut };
     },
   },
   "POST quitter": {

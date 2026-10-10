@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { introuvable } from "../../errors";
+import { acceptSeat, refuseSeat, renewTableQr } from "../../services/access";
 import { closeTableSession, openTableSession, renewSessionCode } from "../../services/cart";
 import { assignRequest, assignTable } from "../../services/responsable";
 import { scopeOf } from "../../services/salle";
@@ -16,6 +17,12 @@ import { serviceStream } from "../stream";
 
 async function assertScope(c: Ctx, tableId: string): Promise<void> {
   if (!scopeOf(await readDb(), c.auth).ids.has(tableId)) throw introuvable("Cette table ne fait pas partie de votre salle.");
+}
+
+async function assertSeatScope(c: Ctx, demandeId: string): Promise<void> {
+  const db = await readDb();
+  const demande = db.DemandesAcces.find((d) => d.id === demandeId);
+  if (!demande || !scopeOf(db, c.auth).ids.has(demande.tableId)) throw introuvable("Cette demande ne fait pas partie de votre salle.");
 }
 
 async function tableOfSession(c: Ctx, sessionId: string): Promise<string> {
@@ -57,6 +64,28 @@ export const responsableRoutes: Routes = {
     run: async (c) => {
       await tableOfSession(c, c.params.id);
       return renewSessionCode(c.actor, c.params.id);
+    },
+  },
+
+  "POST acces/:id/accepter": {
+    perm: "tables.affecter",
+    run: async (c) => {
+      await assertSeatScope(c, c.params.id);
+      return acceptSeat(c.actor, c.params.id);
+    },
+  },
+  "POST acces/:id/refuser": {
+    perm: "tables.affecter",
+    run: async (c) => {
+      await assertSeatScope(c, c.params.id);
+      return refuseSeat(c.actor, c.params.id);
+    },
+  },
+  "POST tables/:id/qr": {
+    perm: "tables.affecter",
+    run: async (c) => {
+      await assertScope(c, c.params.id);
+      return renewTableQr(c.actor, c.params.id);
     },
   },
 

@@ -28,7 +28,7 @@ describe("sauvegardes et restauration", () => {
       db.SessionsPersonnel.push({ id: "ses_admin", utilisateurId: "usr_admin", jetonHash: "h", creeLe: now, vueLe: now, expireLe: new Date(Date.now() + 3600e3).toISOString(), revoqueeLe: "", navigateur: "", ip: "" });
       db.Medias.push({ id: "med_1", nom: "plat.jpg", fichier: `${"c".repeat(32)}.webp`, miniature: `${"c".repeat(32)}-s.webp`, format: "JPG", largeur: 800, hauteur: 600, taille: 5, alt: "", categorie: "produits", creeLe: now, creePar: "", majLe: now });
       db.Zones.push({ id: "zon_salle", nom: "Salle", icone: "house", ordre: 1, active: true });
-      db.Tables.push({ id: "tbl_1", nom: "Table 01", zoneId: "zon_salle", capacite: 4, active: true, serveurId: "", couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now });
+      db.Tables.push({ id: "tbl_1", nom: "Table 01", zoneId: "zon_salle", capacite: 4, active: true, serveurId: "", couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now });
       db.Categories.push({ id: "cat_origine", nom: "Catégorie d'origine", description: "", imageMediaId: "med_1", visible: true, ordre: 1, stationId: "", creeLe: now, majLe: now });
       db.Restaurant[0].nom = "Avant sauvegarde";
       tx.log({ action: "modification", libelle: "État initial", entite: "Restaurant", entiteNom: "Avant sauvegarde" });

@@ -67,8 +67,8 @@ describe("espace serveur", () => {
       t7 = tx.id("tbl");
       t9 = tx.id("tbl");
       db.Tables.push(
-        { id: t7, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: uHugo.id, couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now },
-        { id: t9, nom: "Table 09", zoneId: "zon_salle", capacite: 4, active: true, serveurId: uSarah.id, couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now },
+        { id: t7, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: uHugo.id, couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now },
+        { id: t9, nom: "Table 09", zoneId: "zon_salle", capacite: 4, active: true, serveurId: uSarah.id, couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now },
       );
       db.Categories.push({ id: "cat_pizzas", nom: "Pizzas", description: "", imageMediaId: "", visible: true, ordre: 1, stationId: "", creeLe: now, majLe: now });
       produitId = tx.id("prd");

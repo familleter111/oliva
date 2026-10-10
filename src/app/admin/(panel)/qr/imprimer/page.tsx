@@ -20,7 +20,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
   const base = await siteBase();
   const resto = db.Restaurant[0];
   const marque = { nom: resto?.nom || "Oliva", sousTitre: resto?.sousTitre ?? "", logo: thumbOf(db, resto?.logoMediaId ?? "") };
-  const supports = await Promise.all(tables.map(async (t) => ({ id: t.id, nom: t.nom, svg: await qrSvg(tableUrl(base, t.id)) })));
+  const supports = await Promise.all(tables.map(async (t) => ({ id: t.id, nom: t.nom, svg: await qrSvg(tableUrl(base, t)) })));
 
   return (
     <>

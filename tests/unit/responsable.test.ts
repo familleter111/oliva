@@ -64,8 +64,8 @@ describe("espace responsable de salle", () => {
       t7 = tx.id("tbl");
       t9 = tx.id("tbl");
       db.Tables.push(
-        { id: t7, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: uHugo.id, couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now },
-        { id: t9, nom: "Table 09", zoneId: "zon_salle", capacite: 4, active: true, serveurId: "", couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now },
+        { id: t7, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: uHugo.id, couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now },
+        { id: t9, nom: "Table 09", zoneId: "zon_salle", capacite: 4, active: true, serveurId: "", couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now },
       );
       db.ObjetsPlan.push({ id: tx.id("obj"), zoneId: "zon_salle", type: "table_ronde", tableId: t7, libelle: "", x: 100, y: 100, largeur: 90, hauteur: 90, rotation: 0, ordre: 1 });
       db.Categories.push({ id: "cat_pizzas", nom: "Pizzas", description: "", imageMediaId: "", visible: true, ordre: 1, stationId: "", creeLe: now, majLe: now });

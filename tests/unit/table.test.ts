@@ -33,7 +33,7 @@ describe("parcours client d'une table", () => {
       const now = tx.now;
       db.Zones.push({ id: "zon_salle", nom: "Salle", icone: "house", ordre: 1, active: true });
       tableId = tx.id("tbl");
-      db.Tables.push({ id: tableId, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: "", couleur: "#8FA382", archiveeLe: "", creeLe: now, majLe: now });
+      db.Tables.push({ id: tableId, nom: "Table 07", zoneId: "zon_salle", capacite: 6, active: true, serveurId: "", couleur: "#8FA382", qrJeton: "", archiveeLe: "", creeLe: now, majLe: now });
       db.Categories.push({ id: "cat_pizzas", nom: "Pizzas", description: "", imageMediaId: "", visible: true, ordre: 1, stationId: "", creeLe: now, majLe: now });
       produitId = tx.id("prd");
       db.Produits.push({ id: produitId, nom: "Pizza della casa", description: "", categorieId: "cat_pizzas", prixCentimes: 1850, imageMediaId: "", allergeneIds: [], etiquetteIds: [], groupeOptionIds: [], tempsPreparationMin: 15, disponible: true, visible: true, ordre: 1, creeLe: now, majLe: now });
@@ -52,7 +52,7 @@ describe("parcours client d'une table", () => {
     const gate = table.tableGate(db0, tableId, undefined);
     assert.ok(gate?.sessionOuverte);
     assert.ok(!JSON.stringify(gate).includes(sessionCode));
-    assert.deepEqual(Object.keys(gate!).sort(), ["banniere", "enAttente", "politique", "pseudo", "restaurant", "sessionOuverte", "table", "termine"]);
+    assert.deepEqual(Object.keys(gate!).sort(), ["banniere", "demande", "enAttente", "politique", "pseudo", "qrPerime", "restaurant", "sessionOuverte", "table", "termine"]);
     assert.equal(table.tableGate(await s.readDb(), "tbl_inconnue", undefined), null);
     assert.equal(table.admitted(await s.readDb(), tableId, "jeton-invente-jeton-invente-jeton"), false);
     assert.throws(() => table.tableState(db0, "jeton-invente-jeton-invente-jeton"), (e) => code(e) === "interdit");

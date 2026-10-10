@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ID } from "../../defaults";
 import { must } from "../../db-utils";
 import { conflit, invalide } from "../../errors";
+import { acceptSeat, refuseSeat, renewTableQr } from "../../services/access";
 import type { Row } from "../../schema";
 import { admitParticipant, closeTableSession, openTableSession, renewSessionCode } from "../../services/cart";
 import { closeRequest, refuseParticipant, serviceState, setOrderStatus } from "../../services/table";
@@ -119,5 +120,8 @@ export const salleRoutes: Routes = {
   },
   "POST demandes/:id/traiter": { perm: "commandes.voir", run: (c) => closeRequest(c.actor, c.params.id) },
   "POST participants/:id/admettre": { perm: "sessions.gerer", run: (c) => admitParticipant(c.actor, c.params.id) },
+  "POST acces/:id/accepter": { perm: "sessions.gerer", run: (c) => acceptSeat(c.actor, c.params.id) },
+  "POST acces/:id/refuser": { perm: "sessions.gerer", run: (c) => refuseSeat(c.actor, c.params.id) },
+  "POST tables/:id/qr": { perm: "salle.configurer", run: (c) => renewTableQr(c.actor, c.params.id) },
   "POST participants/:id/refuser": { perm: "sessions.gerer", run: (c) => refuseParticipant(c.actor, c.params.id) },
 };

@@ -5,8 +5,10 @@ import { notFound } from "next/navigation";
 import { DeliverBill, SalleAction } from "@/components/salle/actions";
 import { Dishes, Guests, Hour, Money, Notes, OrderBadge, RequestBadge, RequestIcon, two } from "@/components/salle/parts";
 import { Crumb } from "@/components/salle/shell";
+import { RenewQr, SeatRequests } from "@/components/staff/seats";
 import { Badge, Card, EmptyState, buttonClass } from "@/components/ui";
 import { requireStaffPage } from "@/lib/server/auth/session";
+import { pendingSeats } from "@/lib/server/services/access";
 import { tableDetail } from "@/lib/server/services/salle";
 import { readDb } from "@/lib/server/storage";
 
@@ -25,6 +27,7 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
   }
   const fuseau = db.Restaurant[0]?.fuseauHoraire || "Europe/Paris";
   const { addition } = vue;
+  const arrivees = pendingSeats(db, new Set([tableId]));
 
   return (
     <>
@@ -42,7 +45,16 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
         <Badge tone={vue.sessionOuverte ? "olive" : "neutral"} dot>
           {vue.sessionOuverte ? "Session en cours" : "Aucune session ouverte"}
         </Badge>
+        <span className="ml-auto">
+          <RenewQr tableId={tableId} espace="salle" />
+        </span>
       </div>
+
+      {arrivees.length > 0 ? (
+        <div className="mt-5">
+          <SeatRequests demandes={arrivees} espace="salle" fuseau={fuseau} titre="Arrivées à cette table" />
+        </div>
+      ) : null}
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <section aria-labelledby="cmd-titre">
