@@ -1,0 +1,22 @@
+# Dépendances et build
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Données réelles : classeurs Excel, médias, sauvegardes. Jamais dans le dépôt.
+storage/
+storage-*/
+!storage/.gitkeep
+
+# Divers
+.DS_Store
+npm-debug.log*
+.vscode/
+tests/.tmp/
