@@ -2585,5 +2585,9 @@
  "la table « {} » devrait être une liste.": "the table \"{}\" should be a list.",
  "ligne illisible dans « {} » ({}).": "unreadable row in \"{}\" ({}).",
  "présente": "present",
- "absente": "missing"
+ "absente": "missing",
+ "présente (jeton)": "present (token)",
+ "présente (OIDC)": "present (OIDC)",
+ "jeton": "",
+ "oidc": ""
 }

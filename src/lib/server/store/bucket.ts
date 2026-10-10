@@ -88,9 +88,17 @@ function fichiers(): Bucket {
 
 /* --------------------------------------------------------------------- blob */
 
-/** Le jeton est fourni par l'hébergeur. Sans lui, le dépôt Blob n'est pas configuré. */
+/** Mode d'authentification du dépôt Blob, ou chaîne vide s'il n'est pas configuré. */
+export function blobMode(): "" | "jeton" | "oidc" {
+  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) return "jeton";
+  // Rattachement par OIDC : l'hébergeur fournit un jeton de courte durée et l'identifiant du dépôt,
+  // et ne pose aucun jeton de lecture-écriture dans les variables du projet.
+  if (process.env.VERCEL_OIDC_TOKEN?.trim() && process.env.BLOB_STORE_ID?.trim()) return "oidc";
+  return "";
+}
+
 export function blobConfigured(): boolean {
-  return !!process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  return blobMode() !== "";
 }
 
 function blob(): Bucket {

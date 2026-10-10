@@ -1,7 +1,7 @@
 import { appSecret, ephemeralHost, storageRoot } from "@/lib/server/env";
 import { isAppError } from "@/lib/server/errors";
 import { readDb } from "@/lib/server/storage";
-import { blobConfigured } from "@/lib/server/store/bucket";
+import { blobConfigured, blobMode } from "@/lib/server/store/bucket";
 import { postgresConfigured } from "@/lib/server/store/postgres";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +19,12 @@ const json = (body: unknown, status: number) =>
  */
 function variables(): Record<string, string> {
   const vu = (...noms: string[]) => (noms.some((n) => (process.env[n] ?? "").trim() !== "") ? "présente" : "absente");
+  const mode = blobMode();
   return {
     OLIVA_SECRET: vu("OLIVA_SECRET"),
     DATABASE_URL: vu("OLIVA_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"),
-    BLOB_READ_WRITE_TOKEN: vu("BLOB_READ_WRITE_TOKEN"),
+    // Le dépôt Blob s'authentifie par jeton de lecture-écriture, ou par OIDC avec l'identifiant du dépôt.
+    BLOB: mode === "jeton" ? "présente (jeton)" : mode === "oidc" ? "présente (OIDC)" : "absente",
     OLIVA_PUBLIC_URL: vu("OLIVA_PUBLIC_URL"),
   };
 }

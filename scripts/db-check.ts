@@ -1,4 +1,4 @@
-import { blobConfigured, bucket } from "@/lib/server/store/bucket";
+import { blobMode, bucket } from "@/lib/server/store/bucket";
 import { isAppError } from "@/lib/server/errors";
 import { SHEETS } from "@/lib/server/schema";
 import { databaseUrl, pgFermer, pgInfo, pgLire, pgSignal, postgresConfigured } from "@/lib/server/store/postgres";
@@ -38,12 +38,13 @@ async function main() {
     }
   }
 
-  const depot = bucket();
-  if (blobConfigured()) {
-    const images = await depot.list("media");
-    console.log(`Images        : dépôt Blob, ${images.length} fichier(s).`);
+  const mode = blobMode();
+  if (mode) {
+    const images = await bucket().list("media");
+    console.log(`Images        : dépôt Blob (${mode === "oidc" ? "OIDC" : "jeton"}), ${images.length} fichier(s).`);
   } else {
-    console.log("Images        : aucun dépôt Blob configuré (BLOB_READ_WRITE_TOKEN absent).");
+    console.log("Images        : aucun dépôt Blob configuré.");
+    console.log("                Il faut BLOB_READ_WRITE_TOKEN, ou BLOB_STORE_ID avec VERCEL_OIDC_TOKEN.");
     console.log("                Sur un hébergement sans disque, les images importées seraient perdues.");
   }
   console.log("Aucune donnée n'a été modifiée.");
