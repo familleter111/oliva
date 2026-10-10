@@ -249,6 +249,19 @@ docker compose exec oliva npm run admin:init   # une seule fois, avec OLIVA_ADMI
 
 Le volume `oliva-donnees` est monté sur `/data` et contient tout le stockage. Il survit aux reconstructions de l'image : ne le supprimez pas. Les commandes d'exploitation s'exécutent dans le conteneur, par exemple `docker compose exec oliva npm run storage:verifier`.
 
+### Sur une plateforme d'hébergement
+
+Deux descripteurs prêts à l'emploi, tous deux fondés sur le `Dockerfile` :
+
+| Fichier | Plateforme | Mise en place |
+| --- | --- | --- |
+| `fly.toml` | Fly.io | `fly launch --no-deploy --copy-config`, puis `fly volumes create oliva_donnees --size 3`, `fly secrets set OLIVA_SECRET=...`, `fly deploy` |
+| `render.yaml` | Render | Nouveau Blueprint à partir du dépôt, puis saisie des variables dans le tableau de bord |
+
+Dans les deux cas : une seule instance, un disque monté sur `/data`, et `/api/sante` comme sonde d'état. Le premier administrateur se crée ensuite une seule fois, dans la console de la plateforme : `npm run admin:init`, avec `OLIVA_ADMIN_EMAIL` et `OLIVA_ADMIN_PASSWORD` définis. La commande ne touche à rien si un administrateur existe déjà.
+
+Un disque persistant est une option payante chez Render, et le volume Fly.io est facturé au gigaoctet. C'est le prix d'un stockage qui survit aux redémarrages.
+
 ### Sans Docker
 
 Mise en place :

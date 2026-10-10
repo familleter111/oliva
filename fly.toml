@@ -1,0 +1,44 @@
+# Fly.io : une seule machine, un volume monté sur /data.
+# Mise en place :
+#   fly launch --no-deploy --copy-config --name oliva
+#   fly volumes create oliva_donnees --size 3 --region cdg --yes
+#   fly secrets set OLIVA_SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")
+#   fly secrets set OLIVA_PUBLIC_URL=https://oliva.fly.dev
+#   fly deploy
+#   fly ssh console -C "npm run admin:init"   # avec OLIVA_ADMIN_EMAIL et OLIVA_ADMIN_PASSWORD définis en secrets
+app = "oliva"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  OLIVA_STORAGE_DIR = "/data"
+  PORT = "3000"
+
+# Le volume porte toutes les données : classeur, images, sauvegardes.
+[mounts]
+  source = "oliva_donnees"
+  destination = "/data"
+
+# Une seule machine écrit dans le stockage : on remplace l'ancienne avant d'en démarrer une neuve.
+[deploy]
+  strategy = "immediate"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/api/sante"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

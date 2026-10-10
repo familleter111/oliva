@@ -1,0 +1,30 @@
+# Render : service Docker unique avec un disque persistant.
+# Un disque exige une instance payante : le plan gratuit perd les données à chaque redémarrage.
+# Après le premier déploiement, ouvrez l'onglet Shell du service et lancez : npm run admin:init
+services:
+  - type: web
+    name: oliva
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: frankfurt
+    # Une seule instance : le stockage refuse un second processus écrivain.
+    numInstances: 1
+    healthCheckPath: /api/sante
+    disk:
+      name: oliva-donnees
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: OLIVA_STORAGE_DIR
+        value: /data
+      # Valeurs à saisir dans le tableau de bord, jamais dans ce fichier.
+      # Secret : node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+      - key: OLIVA_SECRET
+        sync: false
+      - key: OLIVA_PUBLIC_URL
+        sync: false
+      - key: OLIVA_ADMIN_EMAIL
+        sync: false
+      - key: OLIVA_ADMIN_PASSWORD
+        sync: false
