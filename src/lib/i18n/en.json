@@ -2583,5 +2583,7 @@
  "l'enregistrement est vide.": "the record is empty.",
  "la table « {} » est absente.": "the table \"{}\" is missing.",
  "la table « {} » devrait être une liste.": "the table \"{}\" should be a list.",
- "ligne illisible dans « {} » ({}).": "unreadable row in \"{}\" ({})."
+ "ligne illisible dans « {} » ({}).": "unreadable row in \"{}\" ({}).",
+ "présente": "present",
+ "absente": "missing"
 }

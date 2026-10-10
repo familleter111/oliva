@@ -13,14 +13,38 @@ const json = (body: unknown, status: number) =>
   });
 
 /**
+ * Présence des variables attendues, jamais leur contenu.
+ * Sur un hébergement, une variable peut exister dans le tableau de bord sans atteindre le serveur :
+ * mauvais environnement coché, ou déploiement plus ancien que la variable.
+ */
+function variables(): Record<string, string> {
+  const vu = (...noms: string[]) => (noms.some((n) => (process.env[n] ?? "").trim() !== "") ? "présente" : "absente");
+  return {
+    OLIVA_SECRET: vu("OLIVA_SECRET"),
+    DATABASE_URL: vu("OLIVA_DATABASE_URL", "DATABASE_URL", "POSTGRES_URL"),
+    BLOB_READ_WRITE_TOKEN: vu("BLOB_READ_WRITE_TOKEN"),
+    OLIVA_PUBLIC_URL: vu("OLIVA_PUBLIC_URL"),
+  };
+}
+
+/**
  * État du service, destiné à l'exploitation : sonde de l'hébergeur et diagnostic après une mise en ligne.
  * Ne renvoie aucune donnée du restaurant ni aucun secret, seulement de quoi comprendre une panne.
  */
 export async function GET() {
-  const details: Record<string, string> = {};
+  const details: Record<string, unknown> = {};
   const base = postgresConfigured();
   const blob = blobConfigured();
   const hote = ephemeralHost();
+
+  if (hote) {
+    // Permet de distinguer l'environnement servi : une variable cochée pour la production
+    // n'existe pas dans un déploiement de préversion.
+    details.environnement = process.env.VERCEL_ENV || "inconnu";
+    const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7);
+    if (commit) details.version = commit;
+  }
+  details.variables = variables();
 
   details.donnees = base ? "base de données" : "classeur Excel sur disque";
   details.fichiers = blob ? "dépôt Blob" : "disque";
