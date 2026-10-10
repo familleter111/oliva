@@ -12,7 +12,7 @@ import { changeMarker } from "./db-utils";
 import { initialDb } from "./defaults";
 import { RELATIONS, SHEETS, SHEET_LABEL, columnsOf, type AnyRow, type Db, type SheetName } from "./schema";
 import { decodeWorkbook, encodeWorkbook, fingerprint } from "./workbook";
-import { blobConfigured, bucket } from "./store/bucket";
+import { bucket } from "./store/bucket";
 import { pgEcrire, pgFermer, pgInfo, pgLire, pgRemplacer, pgRevision, postgresConfigured } from "./store/postgres";
 
 /**
@@ -427,10 +427,11 @@ async function autoBackup(): Promise<void> {
 
 /**
  * Copie horaire de sécurité quand l'état vit en base. Elle part dans le dépôt de fichiers
- * (Blob en ligne, disque en local) sous la même forme qu'une sauvegarde automatique classique.
+ * (base ou Blob en ligne, disque en local) sous la même forme qu'une sauvegarde automatique classique.
  */
 async function autoBackupBase(db: Db): Promise<void> {
-  if (!blobConfigured() && ephemeralHost()) return;
+  // Sur un hébergement sans disque, une copie écrite sur le disque éphémère ne protège de rien.
+  if (bucket().nom === "disque" && ephemeralHost()) return;
   const s = state();
   const depot = bucket();
   if (s.lastAutoBackup === 0) {

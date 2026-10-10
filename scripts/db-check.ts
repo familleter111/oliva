@@ -39,13 +39,14 @@ async function main() {
   }
 
   const mode = blobMode();
-  if (mode) {
-    const images = await bucket().list("media");
-    console.log(`Images        : dépôt Blob (${mode === "oidc" ? "OIDC" : "jeton"}), ${images.length} fichier(s).`);
-  } else {
-    console.log("Images        : aucun dépôt Blob configuré.");
-    console.log("                Il faut BLOB_READ_WRITE_TOKEN, ou BLOB_STORE_ID avec VERCEL_OIDC_TOKEN.");
+  const depot = bucket();
+  if (depot.nom === "disque") {
+    console.log("Images        : disque local.");
     console.log("                Sur un hébergement sans disque, les images importées seraient perdues.");
+  } else {
+    const images = await depot.list("media");
+    const ou = depot.nom === "blob" ? `dépôt Blob (${mode === "oidc" ? "OIDC" : "jeton"})` : "base de données";
+    console.log(`Images        : ${ou}, ${images.length} fichier(s).`);
   }
   console.log("Aucune donnée n'a été modifiée.");
 }

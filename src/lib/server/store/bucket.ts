@@ -3,12 +3,13 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { ensureDir, storageRoot } from "../env";
 import { AppError, invalide } from "../errors";
+import { pgDossiersLister, pgFichierCopier, pgFichierEcrire, pgFichierLire, pgFichierSupprimer, pgFichiersLister, pgFichiersSupprimer, postgresConfigured } from "./postgres";
 
 /**
  * Dépôt de fichiers binaires : images, sauvegardes, archives d'historique.
- * Deux implémentations, choisies par la configuration : le disque local, ou le stockage Blob
- * quand l'application tourne sur un hébergement sans disque. Les clés sont des chemins
- * relatifs en minuscules, séparés par des barres obliques, sans `..`.
+ * Trois implémentations, choisies par la configuration : le disque local, le stockage Blob,
+ * ou la base de données elle-même quand l'application tourne sur un hébergement sans disque.
+ * Les clés sont des chemins relatifs, séparés par des barres obliques, sans `..`.
  */
 export interface BucketEntry {
   cle: string;
@@ -17,12 +18,14 @@ export interface BucketEntry {
 }
 
 export interface Bucket {
-  readonly nom: "disque" | "blob";
+  readonly nom: "disque" | "blob" | "base";
   put(cle: string, data: Buffer, opts?: { ecraser?: boolean; typeMime?: string }): Promise<void>;
   get(cle: string): Promise<Buffer | null>;
   remove(cle: string): Promise<void>;
   /** Entrées directement sous ce préfixe, sans descendre dans les sous-dossiers. */
   list(prefixe: string): Promise<BucketEntry[]>;
+  /** Noms des sous-dossiers directement sous ce préfixe. */
+  dossiers(prefixe: string): Promise<string[]>;
   /** Efface tout ce qui se trouve sous ce préfixe, sous-dossiers compris. */
   removeAll(prefixe: string): Promise<void>;
   copy(de: string, vers: string): Promise<void>;
@@ -74,6 +77,11 @@ function fichiers(): Bucket {
         if (st?.isFile()) out.push({ cle: `${prefixe ? `${prefixe}/` : ""}${nom}`, taille: st.size, dateMs: st.mtimeMs });
       }
       return out;
+    },
+    async dossiers(prefixe) {
+      const dir = path.join(storageRoot(), ...(prefixe ? checkKey(prefixe).split("/") : []));
+      const entrees = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+      return entrees.filter((e) => e.isDirectory()).map((e) => e.name);
     },
     async removeAll(prefixe) {
       await fsp.rm(plein(prefixe), { recursive: true, force: true }).catch(() => undefined);
@@ -172,6 +180,12 @@ function blob(): Bucket {
       } while (curseur);
       return out;
     },
+    async dossiers(prefixe) {
+      const { list } = await sdk();
+      const debut = prefixe ? `${checkKey(prefixe)}/` : "";
+      const page = await list({ ...auth(), prefix: debut, mode: "folded", limit: 1000 });
+      return (page.folders ?? []).map((f) => f.slice(debut.length).replace(/\/$/, ""));
+    },
     async removeAll(prefixe) {
       const { del, list } = await sdk();
       const debut = `${checkKey(prefixe)}/`;
@@ -190,15 +204,56 @@ function blob(): Bucket {
   };
 }
 
+/* --------------------------------------------------------------------- base */
+
+/**
+ * Les binaires vivent dans la base, à côté de l'état : un hébergement sans disque n'a alors
+ * plus rien d'autre à configurer que `DATABASE_URL`.
+ */
+function basePg(): Bucket {
+  const debutDe = (prefixe: string) => (prefixe ? `${checkKey(prefixe)}/` : "");
+  return {
+    nom: "base",
+    async put(cle, data, opts) {
+      const ecrit = await pgFichierEcrire(checkKey(cle), data, opts?.typeMime ?? "application/octet-stream", opts?.ecraser ?? false);
+      if (!ecrit) throw new AppError("stockage", "Un fichier porte déjà ce nom. Rien n'a été modifié.");
+    },
+    async get(cle) {
+      return pgFichierLire(checkKey(cle));
+    },
+    async remove(cle) {
+      return pgFichierSupprimer(checkKey(cle));
+    },
+    async list(prefixe) {
+      return pgFichiersLister(debutDe(prefixe));
+    },
+    async dossiers(prefixe) {
+      return pgDossiersLister(debutDe(prefixe));
+    },
+    async removeAll(prefixe) {
+      return pgFichiersSupprimer(`${checkKey(prefixe)}/`);
+    },
+    async copy(de, vers) {
+      const copie = await pgFichierCopier(checkKey(de), checkKey(vers));
+      if (!copie) throw new AppError("stockage", "Le fichier à copier est introuvable. Rien n'a été modifié.");
+    },
+  };
+}
+
 /* ------------------------------------------------------------------- choix */
 
 const holder = globalThis as unknown as { __olivaBucket?: Bucket };
 
-/** Dépôt actif. Blob dès qu'un jeton est configuré, disque sinon. */
+/** Dépôt actif : Blob dès qu'un jeton est configuré, sinon la base de données, sinon le disque. */
 export function bucket(): Bucket {
-  const voulu = blobConfigured() ? "blob" : "disque";
-  if (holder.__olivaBucket?.nom !== voulu) holder.__olivaBucket = voulu === "blob" ? blob() : fichiers();
+  const voulu: Bucket["nom"] = blobConfigured() ? "blob" : postgresConfigured() ? "base" : "disque";
+  if (holder.__olivaBucket?.nom !== voulu) holder.__olivaBucket = voulu === "blob" ? blob() : voulu === "base" ? basePg() : fichiers();
   return holder.__olivaBucket;
+}
+
+/** Nom lisible du dépôt actif, pour les écrans d'exploitation. */
+export function bucketLabel(nom: Bucket["nom"] = bucket().nom): string {
+  return nom === "blob" ? "dépôt Blob" : nom === "base" ? "base de données" : "disque";
 }
 
 export { prefixeDe };

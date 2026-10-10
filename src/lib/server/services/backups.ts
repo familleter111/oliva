@@ -94,18 +94,9 @@ async function backupIds(): Promise<string[]> {
   return noms.filter((n) => BACKUP_ID.test(n));
 }
 
-/** Sous-dossiers de `backups` : le depot ne liste que des fichiers, pas des dossiers. */
+/** Sous-dossiers de `backups` : chaque dépôt sait les nommer, aucun ne liste de dossier en propre. */
 async function sousDossiers(): Promise<string[]> {
-  if (bucket().nom === "disque") {
-    const fsp = await import("node:fs/promises");
-    const path = await import("node:path");
-    const { storageRoot } = await import("../env");
-    const entrees = await fsp.readdir(path.join(storageRoot(), "backups"), { withFileTypes: true }).catch(() => []);
-    return entrees.filter((e) => e.isDirectory()).map((e) => e.name);
-  }
-  const { list } = await import("@vercel/blob");
-  const page = await list({ prefix: "backups/", mode: "folded", limit: 1000 });
-  return (page.folders ?? []).map((f) => f.slice("backups/".length).replace(/\/$/, ""));
+  return bucket().dossiers("backups").catch(() => []);
 }
 
 async function load(id: string) {

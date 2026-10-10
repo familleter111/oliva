@@ -1,7 +1,7 @@
 import { appSecret, ephemeralHost, storageRoot } from "@/lib/server/env";
 import { isAppError } from "@/lib/server/errors";
 import { readDb } from "@/lib/server/storage";
-import { blobConfigured, blobMode } from "@/lib/server/store/bucket";
+import { blobMode, bucket, bucketLabel } from "@/lib/server/store/bucket";
 import { postgresConfigured } from "@/lib/server/store/postgres";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ function variables(): Record<string, string> {
 export async function GET() {
   const details: Record<string, unknown> = {};
   const base = postgresConfigured();
-  const blob = blobConfigured();
+  const fichiersSurvivent = bucket().nom !== "disque";
   const hote = ephemeralHost();
 
   if (hote) {
@@ -49,7 +49,7 @@ export async function GET() {
   details.variables = variables();
 
   details.donnees = base ? "base de données" : "classeur Excel sur disque";
-  details.fichiers = blob ? "dépôt Blob" : "disque";
+  details.fichiers = bucketLabel();
   if (!base) {
     try {
       details.dossier = storageRoot();
@@ -57,7 +57,7 @@ export async function GET() {
       details.dossier = "chemin invalide";
     }
   }
-  if (hote && (!base || !blob)) {
+  if (hote && (!base || !fichiersSurvivent)) {
     details.avertissement = `Hébergement ${hote} : ${!base ? "les données" : "les images et les sauvegardes"} ont besoin d'un stockage qui survit aux requêtes.`;
   }
 

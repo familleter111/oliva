@@ -2636,5 +2636,17 @@
  "la colonne « {} » manque dans la table « {} ».": "the column \"{}\" is missing from table \"{}\".",
  "Notre restaurant": "Our restaurant",
  "Nos coups de cœur": "Our favourites",
- "Une sélection de nos plats à ne pas manquer.": "A selection of dishes not to be missed."
+ "Une sélection de nos plats à ne pas manquer.": "A selection of dishes not to be missed.",
+ "Un fichier porte déjà ce nom. Rien n'a été modifié.": "A file already has this name. Nothing was changed.",
+ "Le fichier à copier est introuvable. Rien n'a été modifié.": "The file to copy was not found. Nothing was changed.",
+ "create table if not exists {} ( cle text primary key, donnees bytea not null, type_mime text not null default '', maj_le timestamptz not null default now() )": "",
+ "insert into {} (cle, donnees, type_mime, maj_le) values ($#, $#, $#, now()) on conflict (cle) do update set donnees = excluded.donnees, type_mime = excluded.type_mime, maj_le = now()": "",
+ "insert into {} (cle, donnees, type_mime, maj_le) values ($#, $#, $#, now()) on conflict (cle) do nothing": "",
+ "select donnees from {} where cle = $#": "",
+ "delete from {} where cle = $#": "",
+ "select cle, octet_length(donnees)::text as taille, maj_le from {} where starts_with(cle, $#) and strpos(substr(cle, length($#) + #), '/') = # order by cle": "",
+ "select distinct split_part(substr(cle, length($#) + #), '/', #) as nom from {} where starts_with(cle, $#) and strpos(substr(cle, length($#) + #), '/') > # order by nom": "",
+ "delete from {} where starts_with(cle, $#)": "",
+ "insert into {} (cle, donnees, type_mime, maj_le) select $#, donnees, type_mime, now() from {} where cle = $# on conflict (cle) do update set donnees = excluded.donnees, type_mime = excluded.type_mime, maj_le = now()": "",
+ "select count(*)::text as nombre, coalesce(sum(octet_length(donnees)), #)::text as taille from {}": ""
 }

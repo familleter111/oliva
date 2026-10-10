@@ -105,6 +105,21 @@ describe("dépôt de fichiers", () => {
     assert.equal(await d.get("media/aaaa.webp"), null);
   });
 
+  it("choisit le dépôt d'après la configuration, sans jamais préférer le disque éphémère", () => {
+    const avant = { blob: process.env.BLOB_READ_WRITE_TOKEN, base: process.env.DATABASE_URL };
+    try {
+      assert.equal(bucket().nom, "disque", "sans configuration distante, le disque");
+      process.env.DATABASE_URL = "postgres://exemple/base";
+      assert.equal(bucket().nom, "base", "une base configurée accueille aussi les fichiers");
+      process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_exemple";
+      assert.equal(bucket().nom, "blob", "un dépôt Blob reste prioritaire sur la base");
+    } finally {
+      process.env.BLOB_READ_WRITE_TOKEN = avant.blob ?? "";
+      process.env.DATABASE_URL = avant.base ?? "";
+    }
+    assert.equal(bucket().nom, "disque", "la configuration d'essai est bien retirée");
+  });
+
   it("refuse une clé qui sortirait du dépôt", async () => {
     const d = bucket();
     for (const cle of ["../secret", "media/../../etc/passwd", "/absolu", ""]) {

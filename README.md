@@ -58,7 +58,7 @@ Les trois suites de tests travaillent dans `tests/.tmp/` et ne touchent jamais �
 | `OLIVA_SECRET` | Secret technique, 32 caractères minimum. Signe les jetons de session et la protection CSRF. |
 | `OLIVA_STORAGE_DIR` | Dossier de stockage privé. Par défaut `./storage`. Refusé s'il se trouve sous `public/`. |
 | `DATABASE_URL` | Base PostgreSQL. Renseignée, elle remplace le classeur sur disque. `POSTGRES_URL` et `OLIVA_DATABASE_URL` sont acceptées aussi. |
-| `BLOB_READ_WRITE_TOKEN` | Dépôt Vercel Blob pour les images, les sauvegardes et les archives. Fourni par l'hébergeur. |
+| `BLOB_READ_WRITE_TOKEN` | Facultative. Dépôt Vercel Blob pour les images, les sauvegardes et les archives. Sans elle, ces fichiers vont dans la base. |
 | `OLIVA_PUBLIC_URL` | URL publique, utilisée pour les QR codes et les liens d'invitation. |
 | `OLIVA_ADMIN_EMAIL`, `OLIVA_ADMIN_PASSWORD`, `OLIVA_ADMIN_NAME` | Lues uniquement par `npm run admin:init`. |
 | `OLIVA_COOKIE_SECURE` | `false` uniquement pour tester un build de production en HTTP local. |
@@ -121,10 +121,12 @@ Le modèle de données ne change pas d'un stockage à l'autre : les mêmes 44 fe
 | État | `storage/data/oliva.xlsx` | une ligne de la table `oliva_etat` |
 | Version précédente | `oliva.precedent.xlsx` | colonne `precedent` de la même ligne |
 | Écritures concurrentes | verrou de fichier, une seule instance | comparaison de révision, plusieurs serveurs acceptés |
-| Images et sauvegardes | `storage/media`, `storage/backups` | dépôt Blob aux mêmes chemins |
+| Images et sauvegardes | `storage/media`, `storage/backups` | table `oliva_fichiers`, ou dépôt Blob si un jeton est configuré |
 | Rafraîchissement en direct | bus en mémoire | bus en mémoire et relecture de la révision toutes les 4 secondes |
 
-La table est créée au premier démarrage et mise à niveau sans rien perdre. Les exports, les imports et les sauvegardes restent des fichiers `.xlsx` dans les deux cas.
+Les tables sont créées au premier démarrage et mises à niveau sans rien perdre. Les exports, les imports et les sauvegardes restent des fichiers `.xlsx` dans les deux cas.
+
+Les binaires (images publiées, sauvegardes, archives d'historique) passent par un dépôt unique, choisi dans cet ordre : le dépôt Blob si `BLOB_READ_WRITE_TOKEN` est présent, sinon la base de données, sinon le disque. Les clés sont les mêmes partout, si bien qu'un déploiement en ligne ne demande qu'une seule variable, `DATABASE_URL`. Une base convient très bien à la taille d'une carte : la carte de démonstration complète, photos et variantes comprises, pèse moins de 4 Mo.
 
 ### Déroulement d'une écriture
 
@@ -298,12 +300,11 @@ Un disque persistant est une option payante chez Render, et le volume Fly.io est
 
 ### Sur Vercel, avec une base de données
 
-Il n'y a pas de disque, donc les deux services suivants sont nécessaires, tous deux créés depuis l'onglet Storage du projet :
+Il n'y a pas de disque. Un seul service suffit : **Postgres (Neon)**, créé depuis l'onglet Storage du projet et connecté à celui-ci. Vercel ajoute seul `DATABASE_URL`. Les images, les sauvegardes et les archives sont alors rangées dans cette même base.
 
-1. **Postgres (Neon)**, connecté au projet. Vercel ajoute seul `DATABASE_URL`.
-2. **Blob Store**, connecté au même projet, pour les images, les sauvegardes et les archives. Vercel ajoute seul `BLOB_READ_WRITE_TOKEN`.
+Un **Blob Store** reste possible, et prend le pas sur la base dès que son jeton `BLOB_READ_WRITE_TOKEN` atteint le déploiement. Il soulage la base si votre carte porte beaucoup de photos. Attention : la variable doit exister dans les variables du projet, et un déploiement déjà en ligne ne la voit qu'après un redéploiement.
 
-Ajoutez ensuite `OLIVA_SECRET` et `OLIVA_PUBLIC_URL` dans les variables du projet, puis déployez.
+Ajoutez ensuite `OLIVA_SECRET` et `OLIVA_PUBLIC_URL` dans les variables du projet, puis déployez. `/api/sante` indique quel dépôt sert réellement les fichiers.
 
 Le premier administrateur se crée depuis votre poste, une seule fois, en pointant la base de production :
 
@@ -313,7 +314,7 @@ DATABASE_URL=postgres://...            # copié depuis Vercel
 OLIVA_ADMIN_EMAIL=vous@exemple.fr
 OLIVA_ADMIN_PASSWORD=un mot de passe d'au moins 12 caractères
 
-npm run base:verifier   # connexion, table, dépôt Blob : aucun écrit
+npm run base:verifier   # connexion, tables, dépôt de fichiers : aucun écrit
 npm run admin:init      # ne fait rien si un administrateur existe déjà
 ```
 
