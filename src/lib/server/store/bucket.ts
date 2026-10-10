@@ -88,9 +88,23 @@ function fichiers(): Bucket {
 
 /* --------------------------------------------------------------------- blob */
 
+/**
+ * Jeton de lecture-écriture du dépôt, quel que soit le nom de la variable.
+ * Un dépôt rattaché sous un préfixe donne par exemple `OLIVA_READ_WRITE_TOKEN` au lieu du nom par défaut.
+ */
+export function blobToken(): string {
+  // Une variable posée explicitement fait foi, vide comprise : une suite de tests coupe ainsi le dépôt réel.
+  if (process.env.BLOB_READ_WRITE_TOKEN !== undefined) return process.env.BLOB_READ_WRITE_TOKEN.trim();
+  for (const [cle, valeur] of Object.entries(process.env)) {
+    const v = valeur?.trim() ?? "";
+    if (cle.endsWith("_READ_WRITE_TOKEN") && v.startsWith("vercel_blob_rw_")) return v;
+  }
+  return "";
+}
+
 /** Mode d'authentification du dépôt Blob, ou chaîne vide s'il n'est pas configuré. */
 export function blobMode(): "" | "jeton" | "oidc" {
-  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) return "jeton";
+  if (blobToken()) return "jeton";
   // Rattachement par OIDC : l'hébergeur fournit un jeton de courte durée et l'identifiant du dépôt,
   // et ne pose aucun jeton de lecture-écriture dans les variables du projet.
   if (process.env.VERCEL_OIDC_TOKEN?.trim() && process.env.BLOB_STORE_ID?.trim()) return "oidc";
@@ -104,6 +118,8 @@ export function blobConfigured(): boolean {
 function blob(): Bucket {
   // Chargement différé : le paquet n'est utile que sur un hébergement sans disque.
   const sdk = () => import("@vercel/blob");
+  // Sans jeton, l'authentification passe par OIDC : le SDK s'en charge seul.
+  const auth = () => (blobToken() ? { token: blobToken() } : {});
   const absent = (e: unknown) => (e as { name?: string }).name === "BlobNotFoundError";
 
   return {
@@ -112,6 +128,7 @@ function blob(): Bucket {
       const { put } = await sdk();
       try {
         await put(checkKey(cle), data, {
+          ...auth(),
           access: "private",
           addRandomSuffix: false,
           allowOverwrite: opts?.ecraser ?? false,
@@ -124,7 +141,7 @@ function blob(): Bucket {
     async get(cle) {
       const { get } = await sdk();
       try {
-        const res = await get(checkKey(cle), { access: "private", useCache: false });
+        const res = await get(checkKey(cle), { ...auth(), access: "private", useCache: false });
         if (!res) return null;
         const morceaux: Uint8Array[] = [];
         // @ts-expect-error le flux renvoyé par le SDK est bien itérable côté Node.
@@ -137,7 +154,7 @@ function blob(): Bucket {
     },
     async remove(cle) {
       const { del } = await sdk();
-      await del(checkKey(cle)).catch(() => undefined);
+      await del(checkKey(cle), auth()).catch(() => undefined);
     },
     async list(prefixe) {
       const { list } = await sdk();
@@ -145,7 +162,7 @@ function blob(): Bucket {
       const out: BucketEntry[] = [];
       let curseur: string | undefined;
       do {
-        const page = await list({ prefix: debut, cursor: curseur, limit: 1000 });
+        const page = await list({ ...auth(), prefix: debut, cursor: curseur, limit: 1000 });
         for (const b of page.blobs) {
           // Pas de descente dans les sous-dossiers : même règle que `readdir` sur le disque.
           if (b.pathname.slice(debut.length).includes("/")) continue;
@@ -160,15 +177,15 @@ function blob(): Bucket {
       const debut = `${checkKey(prefixe)}/`;
       let curseur: string | undefined;
       do {
-        const page = await list({ prefix: debut, cursor: curseur, limit: 1000 });
+        const page = await list({ ...auth(), prefix: debut, cursor: curseur, limit: 1000 });
         const cles = page.blobs.map((b) => b.pathname);
-        if (cles.length) await del(cles).catch(() => undefined);
+        if (cles.length) await del(cles, auth()).catch(() => undefined);
         curseur = page.hasMore ? page.cursor : undefined;
       } while (curseur);
     },
     async copy(de, vers) {
       const { copy } = await sdk();
-      await copy(checkKey(de), checkKey(vers), { access: "private", addRandomSuffix: false });
+      await copy(checkKey(de), checkKey(vers), { ...auth(), access: "private", addRandomSuffix: false });
     },
   };
 }
