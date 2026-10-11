@@ -1,4 +1,4 @@
-import { ArrowRight, CallBell, ChatCircleDots, CheckCircle, Clock, PicnicTable, Plant, Receipt } from "@phosphor-icons/react/dist/ssr";
+import { ArrowRight, CallBell, ChatCircleDots, CheckCircle, Clock, PicnicTable, Plant, Receipt, UserPlus } from "@phosphor-icons/react/dist/ssr";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Guests, TableTile } from "@/components/salle/parts";
@@ -10,13 +10,14 @@ import { readDb } from "@/lib/server/storage";
 export const metadata: Metadata = { title: "Mes tables" };
 
 const ETAT = {
+  arrivee: { tone: "danger" as const, label: "Arrivée à confirmer", icon: UserPlus },
   libre: { tone: "neutral" as const, label: "Table libre", icon: Clock },
   en_cours: { tone: "info" as const, label: "Session en cours", icon: Clock },
   prete: { tone: "olive" as const, label: "Commande prête", icon: CheckCircle },
   addition: { tone: "warn" as const, label: "Addition demandée", icon: Receipt },
 };
 
-const PRIORITE = { servir: CallBell, demande: ChatCircleDots, addition: Receipt };
+const PRIORITE = { servir: CallBell, demande: ChatCircleDots, addition: Receipt, arrivee: UserPlus };
 
 export default async function Page() {
   const auth = await requireStaffPage("commandes.servir");
@@ -63,7 +64,15 @@ export default async function Page() {
                       <div className="flex items-start gap-4">
                         <TableTile couleur={t.couleur} capacite={t.capacite} className="size-[74px]" />
                         <div className="min-w-0 flex-1">
-                          <h2 className="text-[1.5rem] leading-tight font-bold text-ink">{t.nom}</h2>
+                          <div className="flex items-start justify-between gap-2">
+                            <h2 className="text-[1.5rem] leading-tight font-bold text-ink">{t.nom}</h2>
+                            {t.aFaire > 0 ? (
+                              <span className="num inline-grid min-w-[26px] shrink-0 place-items-center rounded-full bg-danger px-1.5 py-0.5 text-[13.5px] font-medium text-white">
+                                {t.aFaire}
+                                <span className="sr-only"> action{t.aFaire > 1 ? "s" : ""} à faire</span>
+                              </span>
+                            ) : null}
+                          </div>
                           <p className="mt-0.5 text-[14.5px] text-muted">{t.zone}</p>
                           {t.convives > 0 ? (
                             <div className="mt-1">
@@ -77,9 +86,19 @@ export default async function Page() {
                           <Icon size={16} weight="fill" aria-hidden />
                           {etat.label}
                         </Badge>
+                        {t.arrivees > 0 ? (
+                          <Badge tone="danger" dot>
+                            {t.arrivees} arrivée{t.arrivees > 1 ? "s" : ""}
+                          </Badge>
+                        ) : null}
                         {t.demandes > 0 ? (
                           <Badge tone="warn" dot>
                             {t.demandes} demande{t.demandes > 1 ? "s" : ""}
+                          </Badge>
+                        ) : null}
+                        {t.pretes > 0 ? (
+                          <Badge tone="olive" dot>
+                            {t.pretes} commande{t.pretes > 1 ? "s" : ""} prête{t.pretes > 1 ? "s" : ""}
                           </Badge>
                         ) : null}
                       </div>
@@ -112,7 +131,9 @@ export default async function Page() {
                         <span className="block text-[15.5px] font-semibold text-ink">{p.table}</span>
                         <span className="block truncate text-[14.5px] text-muted">{p.texte}</span>
                       </span>
-                      <ArrowRight size={17} aria-hidden className="shrink-0 text-muted" />
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-olive px-3 py-1.5 text-[14px] font-medium text-white">
+                        {p.action} <ArrowRight size={14} aria-hidden />
+                      </span>
                     </Link>
                   </li>
                 );

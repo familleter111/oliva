@@ -64,7 +64,7 @@ export default async function Page() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {vue.priorites.map((p) => {
-                  const tone = p.type === "demande" || p.type === "addition" ? "warn" : "olive";
+                  const tone = p.type === "arrivee" ? "danger" : p.type === "demande" || p.type === "addition" ? "warn" : "olive";
                   return (
                     <li key={p.id}>
                       <Link href={p.href} className="press flex items-center gap-3 rounded-xl border border-line bg-white p-3 hover:bg-olive-tint">
@@ -77,7 +77,9 @@ export default async function Page() {
                           </span>
                           <span className="block text-[14px] text-muted">{p.serveur || "Aucun serveur affecté"}</span>
                         </span>
-                        <CaretRight size={16} aria-hidden className="shrink-0 text-muted" />
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-olive px-3 py-1.5 text-[14px] font-medium text-white">
+                          {p.action} <CaretRight size={14} aria-hidden />
+                        </span>
                       </Link>
                     </li>
                   );

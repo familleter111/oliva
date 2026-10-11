@@ -1,4 +1,4 @@
-import { Armchair, ChatCircleDots, CheckCircle, Clock, DoorOpen, Plant, UsersThree } from "@phosphor-icons/react/dist/ssr";
+import { Armchair, ChatCircleDots, CheckCircle, Clock, DoorOpen, Plant, UserPlus, UsersThree } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/format";
@@ -11,6 +11,7 @@ import { Avatar, Badge, type Tone } from "../ui";
 const CANVAS = { w: 840, h: 640 };
 
 export const ETAT: Record<TableEtat, { label: string; tone: Tone; icon: typeof Clock }> = {
+  arrivee: { label: "Arrivée à confirmer", tone: "danger", icon: UserPlus },
   libre: { label: "Disponible", tone: "neutral", icon: Clock },
   en_service: { label: "En service", tone: "olive", icon: UsersThree },
   a_servir: { label: "Commande prête", tone: "olive", icon: CheckCircle },
@@ -41,6 +42,7 @@ export function TableBadge({ etat }: { etat: TableEtat }) {
 }
 
 const SHAPE: Record<TableEtat, string> = {
+  arrivee: "border-danger bg-danger-soft text-danger ring-2 ring-danger/20",
   libre: "border-line-strong bg-white text-muted",
   en_service: "border-olive/50 bg-olive-soft text-ink",
   a_servir: "border-olive bg-olive-soft text-ink ring-2 ring-olive/25",
@@ -84,7 +86,6 @@ export function FloorPlan({ zone, tables, selected, hrefOf }: { zone: ChefZone; 
                 </span>
               );
             }
-            const Icon = ETAT[t.etat].icon;
             return (
               <Link
                 key={o.id}
@@ -102,14 +103,21 @@ export function FloorPlan({ zone, tables, selected, hrefOf }: { zone: ChefZone; 
                   <span className="num block text-[13px] font-semibold">{t.nom.replace(/^Table\s*/i, "")}</span>
                   {t.convives > 0 ? <span className="num block text-[11px]">{t.convives} conv.</span> : null}
                 </span>
-                {t.etat !== "libre" && t.etat !== "en_service" ? (
-                  <span aria-hidden className="absolute -top-1.5 -right-1.5 inline-grid size-5 place-items-center rounded-full bg-white shadow-card">
-                    <Icon size={13} weight="fill" className={t.etat === "demande" ? "text-warn" : "text-olive"} />
+                {t.aFaire > 0 ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "num absolute -top-1.5 -right-1.5 inline-grid min-w-5 place-items-center rounded-full px-1 py-0.5 text-[11px] font-semibold text-white shadow-card",
+                      t.etat === "arrivee" ? "bg-danger" : t.etat === "demande" ? "bg-warn" : "bg-olive",
+                    )}
+                  >
+                    {t.aFaire}
                   </span>
                 ) : null}
                 <span className="sr-only">
                   {t.nom}, {ETAT[t.etat].label}
                   {t.serveur ? `, servie par ${t.serveur}` : ""}
+                  {t.aFaire > 0 ? `, ${t.aFaire} action${t.aFaire > 1 ? "s" : ""} à faire` : ""}
                 </span>
               </Link>
             );
@@ -126,6 +134,12 @@ export function FloorPlan({ zone, tables, selected, hrefOf }: { zone: ChefZone; 
                 <span className="text-[1.05rem] font-semibold">{t.nom}</span>
                 <span className="text-[13.5px]">{t.convives > 0 ? `${t.convives} convive${t.convives > 1 ? "s" : ""}` : "Disponible"}</span>
                 {t.serveur ? <span className="text-[13px] opacity-80">{t.serveur}</span> : null}
+                {t.aFaire > 0 ? (
+                  <span className="num inline-grid min-w-[22px] place-items-center rounded-full bg-danger px-1.5 py-0.5 text-[12.5px] font-medium text-white">
+                    {t.aFaire}
+                    <span className="sr-only"> action{t.aFaire > 1 ? "s" : ""} à faire</span>
+                  </span>
+                ) : null}
               </Link>
             </li>
           ))}
@@ -138,7 +152,7 @@ export function FloorPlan({ zone, tables, selected, hrefOf }: { zone: ChefZone; 
 export function PlanLegend() {
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[14px] text-muted">
-      {(["libre", "en_service", "a_servir", "demande"] as TableEtat[]).map((e) => (
+      {(["libre", "en_service", "a_servir", "demande", "arrivee"] as TableEtat[]).map((e) => (
         <li key={e} className="inline-flex items-center gap-1.5">
           <span aria-hidden className={cn("size-3 rounded-full border-2", SHAPE[e])} />
           {ETAT[e].label}

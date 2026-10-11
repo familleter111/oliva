@@ -2648,5 +2648,18 @@
  "select distinct split_part(substr(cle, length($#) + #), '/', #) as nom from {} where starts_with(cle, $#) and strpos(substr(cle, length($#) + #), '/') > # order by nom": "",
  "delete from {} where starts_with(cle, $#)": "",
  "insert into {} (cle, donnees, type_mime, maj_le) select $#, donnees, type_mime, now() from {} where cle = $# on conflict (cle) do update set donnees = excluded.donnees, type_mime = excluded.type_mime, maj_le = now()": "",
- "select count(*)::text as nombre, coalesce(sum(octet_length(donnees)), #)::text as taille from {}": ""
+ "select count(*)::text as nombre, coalesce(sum(octet_length(donnees)), #)::text as taille from {}": "",
+ "Arrivée à confirmer": "Arrival to confirm",
+ "à faire": "to do",
+ "arrivée": "arrival",
+ "prête": "ready",
+ ", {} action{} à faire": ", {} action{} to do",
+ "{} arrivée{} à confirmer": "{} arrival{} to confirm",
+ "Traiter": "Handle",
+ "{} attend d'être installé.": "{} is waiting to be seated.",
+ "Un convive": "A guest",
+ "Servir": "Serve",
+ "Apporter": "Bring",
+ "absolute -top-#.# -right-#.# min-w-[#px] px-# text-[#px]": "",
+ "Réouverture à {}.": "Reopening at {}."
 }

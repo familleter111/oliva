@@ -160,6 +160,7 @@ export function countsOf(db: Db, auth: Auth): SalleCounts {
     aServir: db.Commandes.filter((c) => ids.has(c.sessionId) && c.statut === ready).length,
     demandes: db.DemandesClient.filter((d) => ids.has(d.sessionId) && d.statut !== "traitee").length,
     additions: ouvertes.filter((s) => db.AdditionsTable.find((a) => a.sessionId === s.id)?.statut === "a_remettre").length,
+    arrivees: pendingSeats(db, scope.ids).length,
   };
 }
 
@@ -171,6 +172,10 @@ export function homeOf(db: Db, auth: Auth): SalleHome {
   const last = statuts.at(-1)?.id ?? "servie";
   const zones = new Map(db.Zones.map((z) => [z.id, z.nom]));
 
+  const enAttente = pendingSeats(db, scope.ids);
+  const arriveesParTable = new Map<string, number>();
+  for (const a of enAttente) arriveesParTable.set(a.tableId, (arriveesParTable.get(a.tableId) ?? 0) + 1);
+
   const cartes: SalleTableCard[] = db.Tables.filter((t) => scope.ids.has(t.id))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr", { numeric: true }))
     .map((t) => {
@@ -180,6 +185,8 @@ export function homeOf(db: Db, auth: Auth): SalleHome {
       const enCours = commandes.filter((c) => c.statut !== ready && c.statut !== last).length;
       const addition = session ? db.AdditionsTable.find((a) => a.sessionId === session.id) : undefined;
       const additionStatut = session ? ((addition?.statut as BillStatus | undefined) ?? null) : null;
+      const demandes = session ? db.DemandesClient.filter((d) => d.sessionId === session.id && d.statut !== "traitee").length : 0;
+      const arrivees = arriveesParTable.get(t.id) ?? 0;
       return {
         id: t.id,
         nom: t.nom,
@@ -188,10 +195,13 @@ export function homeOf(db: Db, auth: Auth): SalleHome {
         couleur: t.couleur,
         sessionId: session?.id ?? "",
         convives: session ? db.Participants.filter((p) => p.sessionId === session.id && p.statut === "admis").length : 0,
-        etat: !session ? "libre" : pretes > 0 ? "prete" : additionStatut === "a_remettre" ? "addition" : "en_cours",
+        // Du plus pressant au plus calme : quelqu'un attend debout avant tout le reste.
+        etat: arrivees > 0 ? "arrivee" : !session ? "libre" : pretes > 0 ? "prete" : additionStatut === "a_remettre" ? "addition" : "en_cours",
         pretes,
         enCours,
-        demandes: session ? db.DemandesClient.filter((d) => d.sessionId === session.id && d.statut !== "traitee").length : 0,
+        demandes,
+        arrivees,
+        aFaire: arrivees + pretes + demandes + (additionStatut === "a_remettre" ? 1 : 0),
         additionStatut,
       };
     });
@@ -208,9 +218,10 @@ export function homeOf(db: Db, auth: Auth): SalleHome {
   const additions = ouvertes.map((s) => billOf(db, s)).filter((b) => b.statut === "a_remettre" && b.nbCommandes > 0);
 
   const priorites: SallePriority[] = [
-    ...aServir.map((o) => ({ id: `cmd-${o.id}`, type: "servir" as const, table: o.table, texte: `Servir la commande ${String(o.rang).padStart(2, "0")}.`, href: `/salle/servir/${o.id}`, image: o.lignes[0]?.image ?? null })),
-    ...additions.map((b) => ({ id: `add-${b.sessionId}`, type: "addition" as const, table: b.table, texte: "Apporter l'addition.", href: `/salle/additions/${b.sessionId}`, image: b.image })),
-    ...demandes.filter((d) => !d.addition && d.statut === "en_attente").map((d) => ({ id: `dem-${d.id}`, type: "demande" as const, table: d.table, texte: `${d.libelle} : prendre en charge.`, href: `/salle/demandes/${d.id}`, image: null })),
+    ...enAttente.map((a) => ({ id: `arr-${a.id}`, type: "arrivee" as const, table: a.table, texte: `${a.pseudo || "Un convive"} attend d'être installé.`, action: "Installer", href: `/salle/tables/${a.tableId}`, image: null })),
+    ...aServir.map((o) => ({ id: `cmd-${o.id}`, type: "servir" as const, table: o.table, texte: `Servir la commande ${String(o.rang).padStart(2, "0")}.`, action: "Servir", href: `/salle/servir/${o.id}`, image: o.lignes[0]?.image ?? null })),
+    ...additions.map((b) => ({ id: `add-${b.sessionId}`, type: "addition" as const, table: b.table, texte: "Apporter l'addition.", action: "Apporter", href: `/salle/additions/${b.sessionId}`, image: b.image })),
+    ...demandes.filter((d) => !d.addition && d.statut === "en_attente").map((d) => ({ id: `dem-${d.id}`, type: "demande" as const, table: d.table, texte: `${d.libelle} : prendre en charge.`, action: "Traiter", href: `/salle/demandes/${d.id}`, image: null })),
   ].slice(0, 6);
 
   return {

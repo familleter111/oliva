@@ -90,18 +90,24 @@ export interface SalleTableCard {
   sessionId: string;
   convives: number;
   /** Repère affiché sur la carte, du plus urgent au plus calme. */
-  etat: "libre" | "en_cours" | "prete" | "addition";
+  etat: "libre" | "en_cours" | "prete" | "addition" | "arrivee";
   pretes: number;
   enCours: number;
   demandes: number;
+  /** Arrivées en attente de confirmation à cette table. */
+  arrivees: number;
+  /** Nombre d'actions en attente sur cette table, toutes natures confondues. */
+  aFaire: number;
   additionStatut: BillStatus | null;
 }
 
 export interface SallePriority {
   id: string;
-  type: "servir" | "demande" | "addition";
+  type: "servir" | "demande" | "addition" | "arrivee";
   table: string;
   texte: string;
+  /** Verbe du bouton : le geste attendu, pas une description. */
+  action: string;
   href: string;
   image: string | null;
 }
@@ -134,6 +140,8 @@ export interface SalleCounts {
   aServir: number;
   demandes: number;
   additions: number;
+  /** Arrivées en attente de confirmation, traitées sur le même écran que les demandes. */
+  arrivees: number;
 }
 
 /** Droits du membre connecté, calculés sur le serveur et rejoués à chaque action. */

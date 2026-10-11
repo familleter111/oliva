@@ -2,7 +2,7 @@
 
 import type { SalleOrder, SalleRequest } from "./salle-types";
 
-export type TableEtat = "libre" | "en_service" | "a_servir" | "demande";
+export type TableEtat = "libre" | "en_service" | "a_servir" | "demande" | "arrivee";
 
 export interface ChefTable {
   id: string;
@@ -19,6 +19,10 @@ export interface ChefTable {
   pretes: number;
   enPreparation: number;
   demandes: number;
+  /** Arrivées en attente de confirmation à cette table. */
+  arrivees: number;
+  /** Nombre d'actions en attente sur cette table, toutes natures confondues. */
+  aFaire: number;
   additionARemettre: boolean;
   ouverteLe: string;
   derniereActiviteLe: string;
@@ -51,7 +55,9 @@ export interface ChefPriority {
   table: string;
   serveur: string;
   libelle: string;
-  type: "servir" | "addition" | "demande";
+  type: "servir" | "addition" | "demande" | "arrivee";
+  /** Verbe du bouton : le geste attendu, pas une description. */
+  action: string;
   href: string;
 }
 

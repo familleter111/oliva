@@ -88,6 +88,33 @@ export function openingState(horaires: Row<"Horaires">[], exceptions: Row<"Excep
   return { ouvert: false, libelle: closedToday ? "Fermeture exceptionnelle aujourd'hui" : "Fermé actuellement" };
 }
 
+/**
+ * Prise de commande : ouverte pendant le service, puis arrêtée quelques minutes avant la fermeture,
+ * pour laisser à la cuisine le temps de terminer. Sans aucun horaire déclaré, rien n'est bloqué.
+ * `reprise` donne l'heure du prochain créneau du jour, vide s'il n'y en a plus.
+ */
+export function orderingState(
+  horaires: Row<"Horaires">[],
+  exceptions: Row<"Exceptions">[],
+  timeZone: string,
+  arretMin: number,
+  at = new Date(),
+): { ouvert: boolean; reprise: string } {
+  if (!horaires.some((h) => h.ouvert && h.plages.length > 0)) return { ouvert: true, reprise: "" };
+  const { jour, minutes, date } = localParts(timeZone || "Europe/Paris", at);
+  const closedToday = exceptions.some((e) => e.date === date);
+  const today = horaires.find((h) => h.jour === jour);
+  const plages = !closedToday && today?.ouvert ? [...today.plages].sort((a, b) => toMin(a.debut) - toMin(b.debut)) : [];
+  const marge = Math.max(0, arretMin);
+  for (const p of plages) {
+    const start = toMin(p.debut);
+    let end = toMin(p.fin);
+    if (end <= start) end += 24 * 60;
+    if (minutes >= start && minutes < end - marge) return { ouvert: true, reprise: "" };
+  }
+  return { ouvert: false, reprise: plages.find((p) => toMin(p.debut) > minutes)?.debut ?? "" };
+}
+
 function assemble(snap: Snapshot, live: Db, mediaBase: string, lang: string, publie: boolean): MenuData {
   const resto = snap.Restaurant[0];
   const app = snap.Apparence[0];

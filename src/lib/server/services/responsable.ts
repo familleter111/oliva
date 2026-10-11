@@ -5,6 +5,7 @@ import { fullName, must } from "../db-utils";
 import { AppError, conflit, introuvable, invalide } from "../errors";
 import type { Db, Row } from "../schema";
 import { transaction } from "../storage";
+import { pendingSeats } from "./access";
 import { billTotals } from "./bill";
 import { orderBuilder, requestBuilder, scopeOf, sortedStatuses } from "./salle";
 
@@ -30,6 +31,8 @@ export function chefTables(db: Db, auth: Auth): ChefTable[] {
   const last = statuts.at(-1)?.id ?? "servie";
   const zones = new Map(db.Zones.map((z) => [z.id, z.nom]));
   const membres = new Map(db.Utilisateurs.map((u) => [u.id, fullName(u)]));
+  const arriveesParTable = new Map<string, number>();
+  for (const a of pendingSeats(db, scope.ids)) arriveesParTable.set(a.tableId, (arriveesParTable.get(a.tableId) ?? 0) + 1);
 
   return db.Tables.filter((t) => !t.archiveeLe && scope.ids.has(t.id))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr", { numeric: true }))
@@ -39,7 +42,9 @@ export function chefTables(db: Db, auth: Auth): ChefTable[] {
       const demandes = session ? db.DemandesClient.filter((d) => d.sessionId === session.id && d.statut !== "traitee") : [];
       const pretes = commandes.filter((c) => c.statut === ready).length;
       const addition = session ? db.AdditionsTable.find((a) => a.sessionId === session.id) : undefined;
-      const etat: TableEtat = !session ? "libre" : pretes > 0 ? "a_servir" : demandes.length > 0 || addition?.statut === "a_remettre" ? "demande" : "en_service";
+      const arrivees = arriveesParTable.get(t.id) ?? 0;
+      // Du plus pressant au plus calme : quelqu'un attend debout avant tout le reste.
+      const etat: TableEtat = arrivees > 0 ? "arrivee" : !session ? "libre" : pretes > 0 ? "a_servir" : demandes.length > 0 || addition?.statut === "a_remettre" ? "demande" : "en_service";
       const dates = [session?.ouverteLe ?? "", ...commandes.map((c) => c.creeLe), ...demandes.map((d) => d.creeLe)].filter(Boolean).sort();
       return {
         id: t.id,
@@ -55,6 +60,8 @@ export function chefTables(db: Db, auth: Auth): ChefTable[] {
         pretes,
         enPreparation: commandes.filter((c) => c.statut !== ready && c.statut !== last).length,
         demandes: demandes.length,
+        arrivees,
+        aFaire: arrivees + pretes + demandes.length + (addition?.statut === "a_remettre" ? 1 : 0),
         additionARemettre: addition?.statut === "a_remettre",
         ouverteLe: session?.ouverteLe ?? "",
         derniereActiviteLe: dates.at(-1) ?? "",
@@ -97,9 +104,12 @@ function teamOf(db: Db, tables: ChefTable[]): ChefMember[] {
 
 function prioritiesOf(tables: ChefTable[]): ChefPriority[] {
   const out: ChefPriority[] = [];
-  for (const t of tables.filter((x) => x.pretes > 0)) out.push({ id: `s-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Commande prête", type: "servir", href: `/responsable/plan?table=${t.id}` });
-  for (const t of tables.filter((x) => x.additionARemettre)) out.push({ id: `a-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Addition demandée", type: "addition", href: `/responsable/plan?table=${t.id}` });
-  for (const t of tables.filter((x) => x.demandes > 0 && !x.additionARemettre)) out.push({ id: `d-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Demande en attente", type: "demande", href: "/responsable/demandes" });
+  // Une personne qui attend d'être installée passe avant le reste du service.
+  for (const t of tables.filter((x) => x.arrivees > 0))
+    out.push({ id: `r-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: `${t.arrivees} arrivée${t.arrivees > 1 ? "s" : ""} à confirmer`, type: "arrivee", action: "Installer", href: "/responsable/demandes" });
+  for (const t of tables.filter((x) => x.pretes > 0)) out.push({ id: `s-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Commande prête", type: "servir", action: "Voir", href: `/responsable/plan?table=${t.id}` });
+  for (const t of tables.filter((x) => x.additionARemettre)) out.push({ id: `a-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Addition demandée", type: "addition", action: "Voir", href: `/responsable/plan?table=${t.id}` });
+  for (const t of tables.filter((x) => x.demandes > 0 && !x.additionARemettre)) out.push({ id: `d-${t.id}`, tableId: t.id, table: t.nom, serveur: t.serveur, libelle: "Demande en attente", type: "demande", action: "Traiter", href: "/responsable/demandes" });
   return out.slice(0, 6);
 }
 

@@ -22,10 +22,47 @@ const ICONS: Record<string, typeof House> = {
   history: ClockCounterClockwise, database: Database, service: CallBell, picnic: PicnicTable, compass: Compass,
 };
 
+/** Travail en attente, par écran de destination. */
+export interface AdminCounts {
+  commandes: number;
+  demandes: number;
+  arrivees: number;
+  additions: number;
+}
+
+/** Pastille d'une entrée de navigation : le nombre de choses à y faire. */
+function Compteur({ n, flottante }: { n: number; flottante?: boolean }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      className={cn(
+        "num inline-grid place-items-center rounded-full bg-danger font-medium text-white",
+        flottante ? "absolute -top-0.5 -right-0.5 min-w-[18px] px-1 text-[11px]" : "min-w-[22px] px-1.5 py-0.5 text-[12.5px]",
+      )}
+    >
+      {n}
+      <span className="sr-only"> à traiter</span>
+    </span>
+  );
+}
+
+/**
+ * Répartition des pastilles : chaque entrée annonce ce qui se traite sur son propre écran.
+ * Le tableau du service porte les commandes et les demandes, l'espace serveur les arrivées à
+ * confirmer et les additions à remettre, que le tableau du service n'affiche pas.
+ */
+const PASTILLES: Record<string, (c: AdminCounts) => number> = {
+  "/admin/service": (c) => c.commandes + c.demandes,
+  "/salle": (c) => c.arrivees + c.additions,
+};
+
+export const totalAFaire = (c: AdminCounts) => c.commandes + c.demandes + c.arrivees + c.additions;
+
 export interface ShellProps {
   csrf: string;
   user: { nom: string; role: string };
   perms: string[];
+  counts: AdminCounts;
   demo: boolean;
   draft: { count: number; neverPublished: boolean };
   brand: { nom: string; sousTitre: string; logo: string | null };
@@ -33,7 +70,7 @@ export interface ShellProps {
   children: ReactNode;
 }
 
-function Nav({ perms, onNavigate }: { perms: string[]; onNavigate?: () => void }) {
+function Nav({ perms, counts, onNavigate }: { perms: string[]; counts: AdminCounts; onNavigate?: () => void }) {
   const pathname = usePathname();
   const link = (href: string, label: string, icon: ReactNode) => {
     const active = href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
@@ -49,7 +86,8 @@ function Nav({ perms, onNavigate }: { perms: string[]; onNavigate?: () => void }
         )}
       >
         {icon}
-        {label}
+        <span className="flex-1">{label}</span>
+        <Compteur n={PASTILLES[href]?.(counts) ?? 0} />
       </Link>
     );
   };
@@ -165,7 +203,7 @@ function LiveUpdates() {
   return null;
 }
 
-export function AdminShell({ csrf, user, perms, demo, draft, brand, politique, children }: ShellProps) {
+export function AdminShell({ csrf, user, perms, counts, demo, draft, brand, politique, children }: ShellProps) {
   const [open, setOpen] = useState(false);
   const canPublish = perms.includes("publication.publier");
   return (
@@ -176,7 +214,7 @@ export function AdminShell({ csrf, user, perms, demo, draft, brand, politique, c
       <div className="no-print fixed inset-y-0 left-0 z-30 hidden w-[248px] border-r border-line bg-white lg:block">
         <div className="scroll-thin h-full overflow-y-auto px-3 pt-6 pb-8">
           <Brand brand={brand} />
-          <Nav perms={perms} />
+          <Nav perms={perms} counts={counts} />
         </div>
       </div>
 
@@ -194,16 +232,19 @@ export function AdminShell({ csrf, user, perms, demo, draft, brand, politique, c
               </Dialog.Close>
             </div>
             <Brand brand={brand} />
-            <Nav perms={perms} onNavigate={() => setOpen(false)} />
+            <Nav perms={perms} counts={counts} onNavigate={() => setOpen(false)} />
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
       <div className="lg:pl-[248px]">
         <header className="no-print sticky top-0 z-20 flex h-[52px] items-center gap-3 border-b border-line bg-paper/90 px-4 backdrop-blur-sm sm:px-6">
-          <IconButton label="Ouvrir le menu" className="lg:hidden" onClick={() => setOpen(true)}>
-            <List size={22} />
-          </IconButton>
+          <span className="relative shrink-0 lg:hidden">
+            <IconButton label="Ouvrir le menu" onClick={() => setOpen(true)}>
+              <List size={22} />
+            </IconButton>
+            <Compteur n={totalAFaire(counts)} flottante />
+          </span>
           <BackButton fallback="/admin" className="-ml-1" />
           <nav aria-label="Fil d'Ariane" className="min-w-0 flex-1">
             <Crumbs />

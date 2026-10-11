@@ -4,6 +4,7 @@ import { requireStaffPage } from "@/lib/server/auth/session";
 import { ID } from "@/lib/server/defaults";
 import { publishedSnapshot } from "@/lib/server/services/publication";
 import { chefTables } from "@/lib/server/services/responsable";
+import { seatsOf } from "@/lib/server/services/salle";
 import { readDb } from "@/lib/server/storage";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function ChefLayout({ children }: { children: React.ReactNo
       user={{ nom: auth.actor.nom, role: auth.role.nom }}
       brand={{ nom: resto?.nom || "Oliva", sousTitre: resto?.sousTitre ?? "", logo: logo ? `/media/${logo.miniature}` : null }}
       politique={{ min: securite?.motDePasseMin ?? 10, lettreChiffre: securite?.exigerLettreChiffre ?? true, special: securite?.exigerSpecial ?? false }}
-      counts={{ demandes: tables.reduce((n, t) => n + t.demandes, 0), aServir: tables.reduce((n, t) => n + t.pretes, 0) }}
+      counts={{ demandes: tables.reduce((n, t) => n + t.demandes, 0), aServir: tables.reduce((n, t) => n + t.pretes, 0), arrivees: seatsOf(db, auth).length }}
       etat={ouvertes === 0 ? "Aucune table en service" : `${ouvertes} table${ouvertes > 1 ? "s" : ""} en service`}
     >
       {children}

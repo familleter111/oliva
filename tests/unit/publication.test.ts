@@ -154,6 +154,16 @@ describe("état d'ouverture", () => {
     assert.equal(menu.openingState(horaires, [], "America/Montreal", at("2026-10-06T11:30:00Z")).ouvert, false, "7 h 30 à Montréal : fermé");
   });
 
+  it("arrête la prise de commande avant la fermeture, et annonce la reprise", () => {
+    // 14 h 30 à Paris : le service de midi finit à 15:00, l'arrêt est réglé à 15 minutes.
+    assert.deepEqual(menu.orderingState(horaires, [], "Europe/Paris", 15, at("2026-10-06T12:30:00Z")), { ouvert: true, reprise: "" }, "en plein service");
+    assert.deepEqual(menu.orderingState(horaires, [], "Europe/Paris", 15, at("2026-10-06T12:50:00Z")), { ouvert: false, reprise: "19:00" }, "dix minutes avant la fermeture");
+    assert.deepEqual(menu.orderingState(horaires, [], "Europe/Paris", 0, at("2026-10-06T12:50:00Z")), { ouvert: true, reprise: "" }, "sans arrêt réglé, le service va jusqu'au bout");
+    assert.deepEqual(menu.orderingState(horaires, [], "Europe/Paris", 15, at("2026-10-06T21:30:00Z")), { ouvert: false, reprise: "" }, "après le dernier service, aucune reprise ce jour");
+    assert.deepEqual(menu.orderingState(horaires, [{ id: "exc_1", date: "2026-10-06", motif: "Congés", service: "journee" }], "Europe/Paris", 15, at("2026-10-06T11:30:00Z")), { ouvert: false, reprise: "" }, "fermeture exceptionnelle");
+    assert.deepEqual(menu.orderingState([], [], "Europe/Paris", 15, at("2026-10-06T11:30:00Z")), { ouvert: true, reprise: "" }, "sans horaires déclarés, rien n'est bloqué");
+  });
+
   it("tient compte des fermetures exceptionnelles et des horaires non renseignés", () => {
     const exception = [{ id: "exc_1", date: "2026-10-06", motif: "Congés", service: "journee" }];
     assert.deepEqual(menu.openingState(horaires, exception, "Europe/Paris", at("2026-10-06T11:30:00Z")), { ouvert: false, libelle: "Fermeture exceptionnelle aujourd'hui" });

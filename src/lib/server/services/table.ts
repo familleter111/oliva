@@ -6,10 +6,10 @@ import { fullName, must } from "../db-utils";
 import { AppError, conflit, invalide } from "../errors";
 import type { Db, Row } from "../schema";
 import { transaction, type Actor } from "../storage";
-import { qrAccepte, seatOf } from "./access";
+import { pendingSeats, qrAccepte, seatOf } from "./access";
 import { BILL_MOTIF, upsertBill } from "./bill";
 import { price, sessionAccess } from "./cart";
-import { openingState } from "./menu";
+import { openingState, orderingState } from "./menu";
 import { publishedSnapshot } from "./publication";
 
 /**
@@ -128,6 +128,8 @@ export function tableState(db: Db, jeton: string): TableState {
     .slice(0, 20);
 
   const etat = openingState(snap?.Horaires ?? [], snap?.Exceptions ?? [], resto?.fuseauHoraire ?? "Europe/Paris");
+  // La prise de commande s'arrête avant la fermeture, selon le réglage de l'écran Horaires.
+  const prise = orderingState(snap?.Horaires ?? [], snap?.Exceptions ?? [], resto?.fuseauHoraire ?? "Europe/Paris", params.arretAvantFermetureMin ?? 0);
   return {
     table: { id: table.id, nom: table.nom },
     devise: resto?.devise || "EUR",
@@ -160,8 +162,8 @@ export function tableState(db: Db, jeton: string): TableState {
       instructionsMax: params.instructionsMax,
       quantiteMax: params.quantiteMax,
       panierOuvert: !!panier,
-      commandesOuvertes: etat.libelle === "" || etat.ouvert,
-      messageFerme: params.messageHorsHoraires || "La prise de commande est fermée.",
+      commandesOuvertes: prise.ouvert,
+      messageFerme: `${params.messageHorsHoraires || "La prise de commande est fermée."}${prise.reprise ? ` Réouverture à ${prise.reprise}.` : ""}`,
     },
   };
 }
@@ -217,6 +219,22 @@ export function leaveSession(jeton: string) {
 }
 
 /* ------------------------------------------------------------ personnel */
+
+/**
+ * Ce qui reste à faire pour le service, toutes tables confondues.
+ * Sert les pastilles de l'administration, qui voit l'ensemble de la salle.
+ */
+export function serviceCounts(db: Db): { commandes: number; demandes: number; arrivees: number; additions: number } {
+  const ouvertes = db.SessionsTable.filter((s) => s.statut === "ouverte");
+  const ids = new Set(ouvertes.map((s) => s.id));
+  const dernier = [...db.StatutsCommande].sort((a, b) => a.ordre - b.ordre).at(-1)?.id ?? "servie";
+  return {
+    commandes: db.Commandes.filter((c) => ids.has(c.sessionId) && c.statut !== dernier).length,
+    demandes: db.DemandesClient.filter((d) => ids.has(d.sessionId) && d.statut !== "traitee").length,
+    arrivees: pendingSeats(db).length,
+    additions: ouvertes.filter((s) => db.AdditionsTable.find((a) => a.sessionId === s.id)?.statut === "a_remettre").length,
+  };
+}
 
 export function serviceState(db: Db): ServiceState {
   const tables = new Map(db.Tables.map((t) => [t.id, t.nom]));

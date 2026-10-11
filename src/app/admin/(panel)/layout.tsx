@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AdminShell } from "@/components/admin/shell";
 import { requirePage } from "@/lib/server/auth/session";
 import { draftSummary } from "@/lib/server/services/publication";
+import { serviceCounts } from "@/lib/server/services/table";
 import { readDb } from "@/lib/server/storage";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       csrf={auth.csrf}
       user={{ nom: auth.actor.nom, role: auth.role.nom }}
       perms={[...auth.permissions.keys()]}
+      counts={serviceCounts(db)}
       demo={db._meta.donneesDemo}
       draft={draftSummary(db)}
       brand={{ nom: resto?.nom || "Oliva", sousTitre: resto?.sousTitre ?? "", logo: logo ? `/api/admin/medias/fichier/${logo.miniature}` : null }}

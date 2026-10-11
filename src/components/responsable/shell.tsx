@@ -21,7 +21,7 @@ export function ChefShell({
   user: AccountUser;
   brand: { nom: string; sousTitre: string; logo: string | null };
   politique: PasswordPolicy;
-  counts: { demandes: number; aServir: number };
+  counts: { demandes: number; aServir: number; arrivees: number };
   etat: string;
   children: ReactNode;
 }) {
@@ -30,7 +30,7 @@ export function ChefShell({
     { href: "/responsable/plan", label: "Plan de salle", court: "Plan", icon: PicnicTable },
     { href: "/responsable/equipe", label: "Équipe & affectations", court: "Équipe", icon: UsersThree },
     { href: "/responsable/service", label: "Suivi du service", court: "Service", icon: CallBell, badge: counts.aServir },
-    { href: "/responsable/demandes", label: "Demandes clients", court: "Demandes", icon: ChatCircleDots, badge: counts.demandes },
+    { href: "/responsable/demandes", label: "Demandes clients", court: "Demandes", icon: ChatCircleDots, badge: counts.demandes + counts.arrivees },
     { href: "/responsable/sessions", label: "Sessions de table", court: "Sessions", icon: Receipt },
   ];
   return (
