@@ -96,6 +96,11 @@ export default async function Page() {
                             {t.pretes} commande{t.pretes > 1 ? "s" : ""} prête{t.pretes > 1 ? "s" : ""}
                           </Badge>
                         ) : null}
+                        {t.enCours > 0 ? (
+                          <Badge tone="neutral" dot>
+                            {t.enCours} en cuisine
+                          </Badge>
+                        ) : null}
                       </div>
                       <Link href={`/salle/tables/${t.id}`} className={buttonClass("primary", "md", "mt-auto w-full")}>
                         Voir la table <ArrowRight size={18} />

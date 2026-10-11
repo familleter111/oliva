@@ -141,6 +141,34 @@ describe("espace serveur", () => {
     await assert.rejects(() => salle.markServed(hugo, commandeId), (e) => code(e) === "conflit");
   });
 
+  it("le serveur fait avancer sa commande d'une étape, et le convive suit chaque statut", async () => {
+    await cart.addCartLine(vera, { produitId, quantite: 1 });
+    const seconde = (await cart.confirmCart(vera, "cle-salle-2")).commandeId;
+    const hugoPrep = fakeAuth(hugo.user, hugo.role, ["commandes.voir", "commandes.servir", "preparation.changer"]);
+    const etape = async (auth: Auth, statut: string) => {
+      await salle.advanceOrder(auth, seconde, statut);
+      return table.tableState(await s.readDb(), vera).commandes.find((c) => c.id === seconde)?.statut;
+    };
+
+    // Sans le droit de préparation, l'étape intermédiaire reste fermée.
+    await assert.rejects(() => salle.advanceOrder(hugo, seconde, "preparation"), (e) => code(e) === "interdit");
+    // La table d'un autre serveur ne s'avance pas, même avec tous les droits.
+    const sarahPrep = fakeAuth(sarah.user, sarah.role, ["commandes.voir", "commandes.servir", "preparation.changer"]);
+    await assert.rejects(() => salle.advanceOrder(sarahPrep, seconde, "preparation"), (e) => code(e) === "introuvable");
+
+    assert.equal(await etape(hugoPrep, "preparation"), "preparation", "le convive voit la préparation");
+    assert.equal(salle.tableDetail(await s.readDb(), hugo, t7).commandes.find((c) => c.id === seconde)?.suivant?.nom, "Prête");
+    assert.equal(await etape(hugoPrep, "prete"), "prete");
+    assert.equal(salle.serveList(await s.readDb(), hugo).aServir.length, 1, "la commande prête rejoint « À servir »");
+
+    // Le dernier statut relève du service, pas de la préparation.
+    const sansService = fakeAuth(hugo.user, hugo.role, ["commandes.voir", "preparation.changer"]);
+    await assert.rejects(() => salle.advanceOrder(sansService, seconde, "servie"), (e) => code(e) === "interdit");
+    assert.equal(await etape(hugoPrep, "servie"), "servie");
+    await assert.rejects(() => salle.advanceOrder(hugoPrep, seconde, "servie"), (e) => code(e) === "conflit");
+    await assert.rejects(() => salle.advanceOrder(hugoPrep, seconde, "inconnu"), (e) => code(e) === "invalide");
+  });
+
   it("une demande passe par la prise en charge, visible aussitôt par la table", async () => {
     const { id } = await table.createRequest(vera, { motifId: "mtf_autre", message: "Sans fromage ?" });
     let db = await s.readDb();
@@ -170,10 +198,10 @@ describe("espace serveur", () => {
     let db = await s.readDb();
     let addition = salle.billDetail(db, hugo, sessionId).addition;
     assert.equal(addition.statut, "a_remettre");
-    // 2 × 18,50 € plus 10 % de service.
-    assert.equal(addition.commandesCentimes, 3700);
-    assert.equal(addition.serviceCentimes, 370);
-    assert.equal(addition.totalCentimes, 4070);
+    // Les deux commandes de la table, 3 × 18,50 €, plus 10 % de service.
+    assert.equal(addition.commandesCentimes, 5550);
+    assert.equal(addition.serviceCentimes, 555);
+    assert.equal(addition.totalCentimes, 6105);
     assert.equal(salle.countsOf(db, hugo).additions, 1);
 
     await assert.rejects(() => salle.deliverBill(sarah, sessionId), (e) => code(e) === "introuvable");
@@ -209,14 +237,14 @@ describe("espace serveur", () => {
     let db = await s.readDb();
     const figee = salle.billDetail(db, hugo, sessionId).addition;
     assert.equal(figee.statut, "cloturee");
-    assert.equal(figee.totalCentimes, 4070);
+    assert.equal(figee.totalCentimes, 6105);
     assert.ok(figee.clotureeLe !== "");
 
     await s.transaction({ actor: ACTOR }, (dbx) => {
       dbx.ParametresAddition[0].fraisServiceBp = 2000;
     });
     db = await s.readDb();
-    assert.equal(salle.billDetail(db, hugo, sessionId).addition.totalCentimes, 4070);
+    assert.equal(salle.billDetail(db, hugo, sessionId).addition.totalCentimes, 6105);
     assert.deepEqual(
       salle.billList(db, hugo).map((b) => b.statut),
       ["cloturee"],

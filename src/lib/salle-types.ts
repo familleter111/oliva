@@ -30,6 +30,8 @@ export interface SalleOrder {
   /** Vrai quand la cuisine a signalé la commande prête : elle apparaît alors dans « À servir ». */
   prete: boolean;
   servie: boolean;
+  /** Étape suivante du parcours, ou null quand la commande est au dernier statut. */
+  suivant: { id: string; nom: string; dernier: boolean } | null;
   creeLe: string;
   articles: number;
   totalCentimes: number;

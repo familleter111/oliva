@@ -290,10 +290,15 @@ export function serviceState(db: Db): ServiceState {
   };
 }
 
-/** Fait avancer (ou corrige) le statut d'une commande. `rights` vient des permissions du membre connecté. */
-export function setOrderStatus(actor: Actor, commandeId: string, statut: string, rights: { preparer: boolean; servir: boolean }) {
+/**
+ * Fait avancer (ou corrige) le statut d'une commande. `rights` vient des permissions du membre connecté.
+ * `verifier` permet à un espace restreint, comme celui du serveur, d'exiger en plus que la table
+ * fasse partie de son service : le contrôle a lieu dans la transaction, sur les données relues.
+ */
+export function setOrderStatus(actor: Actor, commandeId: string, statut: string, rights: { preparer: boolean; servir: boolean }, verifier?: (db: Db, commande: Row<"Commandes">) => void) {
   return transaction({ actor }, (db, tx) => {
     const c = must(db, "Commandes", commandeId);
+    verifier?.(db, c);
     const statuts = [...db.StatutsCommande].sort((a, b) => a.ordre - b.ordre);
     const next = statuts.find((s) => s.id === statut);
     if (!next) throw invalide("Statut inconnu.");

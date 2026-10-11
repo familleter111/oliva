@@ -20,6 +20,7 @@ export function SalleAction({
   label,
   success,
   icon,
+  body,
   variant = "primary",
   size = "md",
   className,
@@ -29,6 +30,8 @@ export function SalleAction({
   label: string;
   success: string;
   icon?: ReactNode;
+  /** Corps de la requête, pour les actions qui portent un choix, comme l'étape visée. */
+  body?: unknown;
   variant?: Variante;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -37,7 +40,7 @@ export function SalleAction({
   const call = useApi("salle");
   const { run, pending } = useAction();
   return (
-    <button type="button" disabled={pending || disabled} onClick={() => void run(() => call("POST", path), { success })} className={buttonClass(variant, size, className)}>
+    <button type="button" disabled={pending || disabled} onClick={() => void run(() => call("POST", path, body), { success })} className={buttonClass(variant, size, className)}>
       {pending ? <CircleNotch size={18} className="animate-spin" /> : icon}
       {label}
     </button>

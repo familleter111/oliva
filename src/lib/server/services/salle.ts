@@ -7,7 +7,7 @@ import type { Db, Row } from "../schema";
 import { transaction } from "../storage";
 import { BILL_MOTIF, billTotals, upsertBill } from "./bill";
 import { closeTableSession } from "./cart";
-import { names, thumbs } from "./table";
+import { names, setOrderStatus, thumbs } from "./table";
 import { pendingSeats, type SeatRequest } from "./access";
 
 /**
@@ -61,6 +61,8 @@ export function orderBuilder(db: Db) {
   }
   return (c: Row<"Commandes">): SalleOrder => {
     const st = statuts.find((s) => s.id === c.statut);
+    const rang = statuts.findIndex((s) => s.id === c.statut);
+    const suivant = rang < 0 ? undefined : statuts[rang + 1];
     const lignes: SalleLine[] = db.LignesCommande.filter((l) => l.commandeId === c.id).map((l) => ({
       id: l.id,
       nom: l.nom,
@@ -83,6 +85,7 @@ export function orderBuilder(db: Db) {
       couleur: st?.couleur ?? "#5B6B7A",
       prete: c.statut === ready,
       servie: c.statut === last,
+      suivant: suivant ? { id: suivant.id, nom: suivant.nom, dernier: suivant.id === last } : null,
       creeLe: c.creeLe,
       articles: lignes.reduce((n, l) => n + l.quantite, 0),
       totalCentimes: c.totalCentimes,
@@ -317,6 +320,16 @@ export function billDetail(db: Db, auth: Auth, sessionId: string): { addition: S
 }
 
 /* ------------------------------------------------------------ écritures */
+
+/**
+ * Fait avancer une commande d'une étape depuis l'espace serveur. Les droits sont ceux du membre,
+ * exactement comme sur l'écran de service, et la table doit faire partie de son service.
+ */
+export function advanceOrder(auth: Auth, commandeId: string, statut: string) {
+  return setOrderStatus(auth.actor, commandeId, statut, { preparer: auth.can("preparation.changer"), servir: auth.can("commandes.servir") }, (db, commande) =>
+    assertTable(scopeOf(db, auth), commande.tableId),
+  );
+}
 
 /** Le membre a apporté la commande à la table : elle passe au dernier statut. */
 export function markServed(auth: Auth, commandeId: string) {

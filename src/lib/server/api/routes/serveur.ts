@@ -1,7 +1,8 @@
 import "server-only";
 import { introuvable } from "../../errors";
+import { z } from "zod";
 import { acceptSeat, refuseSeat, renewTableQr } from "../../services/access";
-import { deliverBill, finishRequest, markServed, releaseTable, scopeOf, takeRequest } from "../../services/salle";
+import { advanceOrder, deliverBill, finishRequest, markServed, releaseTable, scopeOf, takeRequest } from "../../services/salle";
 import { readDb } from "../../storage";
 import type { Ctx, Routes } from "../core";
 import { serviceStream } from "../stream";
@@ -24,6 +25,12 @@ async function assertTableScope(c: Ctx, tableId: string): Promise<void> {
  */
 export const serveurRoutes: Routes = {
   "POST commandes/:id/servir": { perm: "commandes.servir", run: (c) => markServed(c.auth, c.params.id) },
+  /** Avancer d'une étape : le droit exact dépend du statut visé, et la table doit être dans le service. */
+  "POST commandes/:id/statut": {
+    perm: ["preparation.changer", "commandes.servir"],
+    input: z.object({ statut: z.string().trim().min(1).max(40) }),
+    run: (c, input: { statut: string }) => advanceOrder(c.auth, c.params.id, input.statut),
+  },
   "POST demandes/:id/prendre": { perm: "commandes.voir", run: (c) => takeRequest(c.auth, c.params.id) },
   "POST demandes/:id/traiter": { perm: "commandes.voir", run: (c) => finishRequest(c.auth, c.params.id) },
   "POST additions/:sessionId/remettre": { perm: "commandes.servir", run: (c) => deliverBill(c.auth, c.params.sessionId) },

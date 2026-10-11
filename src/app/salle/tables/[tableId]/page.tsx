@@ -32,6 +32,8 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
   // État réel du service, pour la liste de contrôle avant de libérer la table.
   const pretes = vue.commandes.filter((c) => c.prete).length;
   const enPreparation = vue.commandes.filter((c) => !c.prete && !c.servie).length;
+  // Faire avancer une commande relève du même droit que sur l'écran de service.
+  const droits = { preparer: auth.can("preparation.changer"), servir: auth.can("commandes.servir") };
 
   return (
     <>
@@ -111,9 +113,19 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
                         Voir la commande à servir <ArrowRight size={18} />
                       </Link>
                     ) : (
-                      <p className="mt-4 rounded-xl bg-olive-tint px-4 py-2.5 text-center text-[14.5px] text-muted">
-                        {o.servie ? "Commande servie." : `${o.statutNom} en cuisine.`}
-                      </p>
+                      <div className="mt-4 flex flex-col gap-2">
+                        <p className="rounded-xl bg-olive-tint px-4 py-2.5 text-center text-[14.5px] text-muted">{o.servie ? "Commande servie." : `${o.statutNom}, en cuisine.`}</p>
+                        {o.suivant && (o.suivant.dernier ? droits.servir : droits.preparer) ? (
+                          <SalleAction
+                            path={`commandes/${o.id}/statut`}
+                            body={{ statut: o.suivant.id }}
+                            label={`Passer à « ${o.suivant.nom} »`}
+                            success={`Commande ${two(o.rang)} : ${o.suivant.nom}.`}
+                            icon={<ArrowRight size={18} />}
+                            className="w-full"
+                          />
+                        ) : null}
+                      </div>
                     )}
                   </Card>
                 </li>

@@ -71,7 +71,11 @@ export function ServiceBoard({ initial, fuseau, droits }: { initial: ServiceStat
   };
 
   const last = state.statuts.at(-1)?.id;
-  const nextOf = (o: ServiceOrder) => state.statuts[state.statuts.findIndex((s) => s.id === o.statut) + 1];
+  // Un statut retiré de la configuration n'a pas de suite : mieux vaut ne rien proposer que de revenir au début.
+  const nextOf = (o: ServiceOrder) => {
+    const rang = state.statuts.findIndex((s) => s.id === o.statut);
+    return rang < 0 ? undefined : state.statuts[rang + 1];
+  };
   const nameOf = (id: string) => state.statuts.find((s) => s.id === id)?.nom ?? id;
   const pendingGuests = state.sessions.flatMap((s) => s.enAttente.map((p) => ({ ...p, table: s.table })));
 

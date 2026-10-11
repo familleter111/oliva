@@ -45,6 +45,7 @@ export function initialDb(now: string): Db {
   grant("role_serveur", "sessions.gerer", "selon_autorisation");
   grant("role_serveur", "commandes.voir", "mes_tables");
   grant("role_serveur", "commandes.servir", "mes_tables");
+  grant("role_serveur", "preparation.changer", "mes_tables");
   grant("role_cuisine", "commandes.voir", "ma_station");
   grant("role_cuisine", "preparation.changer", "ma_station");
 

@@ -1035,11 +1035,22 @@ async function serverJourney(admin: Page, browser: Browser): Promise<void> {
     await hasText(client, "C'est envoyé !");
   });
 
+  await step(client, "le serveur fait avancer la commande depuis sa table, le convive suit sans recharger", async () => {
+    await client.bringToFront();
+    await go(client, `/table/${tableId}/commandes`);
+    await admin.bringToFront();
+    await go(admin, `/salle/tables/${tableId}`);
+    await hasText(admin, "Commandes de la table");
+    await click(admin, "button", 'Passer à « En préparation »');
+    await toast(admin, "En préparation.");
+    // La page du convive n'est pas rechargée : c'est le flux en direct qui la met à jour.
+    await client.bringToFront();
+    await client.waitForFunction(() => document.querySelector("article ol li[aria-current]")?.textContent === "En préparation", { timeout: T });
+  });
+
   await step(admin, "la cuisine signale la commande prête", async () => {
     await admin.bringToFront();
     await go(admin, "/admin/service");
-    await click(admin, "button", 'Passer à « En préparation »');
-    await toast(admin, "En préparation.");
     await click(admin, "button", 'Passer à « Prête »');
     await toast(admin, "Prête.");
   });

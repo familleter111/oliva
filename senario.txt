@@ -1,0 +1,89 @@
+Acte 1 — La carte publique · aucun compte
+Fenêtre privée, allez sur https://familleter111-oliva.vercel.app/
+
+Vous devez voir le titre « À table, ensemble. », la photo, puis Nos coups de cœur avec quatre plats en photo.
+Cliquez un plat : sa fiche s'ouvre avec prix, description, allergènes, suppléments.
+Basculez EN en haut à droite : l'interface passe en anglais, les noms des plats restent en français (ils ne sont pas traduits en base). Revenez en FR.
+Descendez : horaires de la semaine, puis Nous trouver.
+❌ Si une photo reste en texte alternatif, dites-le-moi : ce serait une régression.
+
+Acte 2 — Le client demande une table
+Même fenêtre privée.
+
+Bouton Choisir ma table.
+Vous voyez deux zones, Salle principale et Terrasse, et les tables avec leur capacité.
+Prenez une table de la Salle principale (c'est le secteur de Hugo).
+Entrez le prénom Nina, puis Demander cette table.
+Attendu : « Demande envoyée. Notre équipe vient vous confirmer. » Aucune carte, aucun panier. C'est le point le plus important de cet acte : une demande n'ouvre aucun droit.
+Acte 3 — Hugo installe la cliente
+Fenêtre normale. Connectez-vous : hugo@example.test / Oliva-Hugo-Serveur-Salle-2026
+
+Vous arrivez sur Mes tables. Un encart Arrivées à confirmer montre « Nina » avec sa table.
+Dans la vraie vie, vous vérifiez de vive voix que c'est bien elle. Cliquez Installer.
+Attendu : la fenêtre privée s'ouvre toute seule sur la carte, avec « Nina » affichée. Elle n'a rien eu à retaper.
+Acte 4 — La commande
+Fenêtre privée, en Nina.
+
+Ajoutez une Pizza della casa, quantité 2, avec l'instruction « Sans oignons ».
+Ajoutez un dessert.
+Onglet Panier : vérifiez le total.
+Commander et confirmez.
+Attendu : « C'est envoyé », la commande apparaît dans Commandes au statut « Reçue ».
+Acte 5 — La cuisine, puis le service
+Le rôle Cuisine n'a pas encore d'écran. Faites les étapes cuisine avec le compte administrateur.
+
+Fenêtre normale, nouvel onglet, connectez-vous en admin@oliva.local / Oliva-5lj_5UghHt8P → /admin/service (Service en direct).
+
+Passez la commande en En préparation, puis Prête.
+Attendu, côté Nina : le suivi avance tout seul, sans recharger la page.
+Retour sur l'onglet de Hugo, À servir : la commande est là. Marquez-la Servie.
+Attendu côté Nina : « Servie ».
+Acte 6 — Appeler l'équipe, puis l'addition
+Fenêtre privée.
+
+Onglet Service → demandez de l'eau.
+Côté Hugo, Demandes clients : la demande apparaît. Prenez-la en charge, puis clôturez-la.
+Côté Nina : Addition → vérifiez le total, puis On partage ? à 3 personnes.
+Demander l'addition. Côté Hugo, onglet Additions : la table est listée.
+⚠️ Aucun paiement n'est simulé : le règlement se fait avec le personnel, c'est volontaire.
+
+Acte 7 — Les QR codes
+Onglet admin → Salle & QR → QR & sessions.
+
+Chaque table a son QR code et son adresse. Imprimer ouvre la planche de toute la salle.
+Copiez l'adresse de la table de Nina, ouvrez-la dans un troisième navigateur (ou un téléphone) : vous tombez sur l'écran d'accueil de la table, sans rien voir du panier de Nina.
+Maintenant, côté Hugo, ouvrez la table de Nina → Remplacer le QR code.
+Rechargez l'ancienne adresse dans le troisième navigateur : « Ce QR code a été remplacé. » Rechargez la page QR côté admin : le nouveau QR est différent.
+Acte 8 — La responsable de salle
+Nouvel onglet, connectez-vous en camille@example.test / Oliva-Camille-Responsable-2026
+
+Vue d'ensemble : compteurs et priorités du service.
+Plan de salle : cliquez la table de Nina, changez son serveur pour Sarah.
+Équipe & affectations : la charge a suivi le transfert.
+Reconnectez-vous en Hugo : la table de Nina n'est plus dans ses tables. C'est la portée du rôle qui fait son travail. Remettez Hugo ensuite.
+Sessions de table → clôturez la session de Nina.
+Attendu, fenêtre privée : « Merci pour ce moment », accès au panier et aux commandes terminé.
+Acte 9 — La carte évolue
+Onglet admin → Carte & images → Produits.
+
+Changez le prix d'un plat, ou rendez-le indisponible.
+Rechargez la page publique : rien n'a bougé. C'est normal, vous travaillez sur un brouillon.
+Allez dans Publication → Publier.
+Rechargez la page publique : le changement est là.
+Acte 10 — Les refus, qui comptent autant que le reste
+Connexion avec adam@example.test / Oliva-Adam-Serveur-Suspendu-2026 : refusée, le compte est suspendu. Le mot de passe est pourtant le bon.
+Cinq tentatives avec un faux mot de passe sur un compte : le verrouillage temporaire se déclenche.
+Ouvrez l'adresse d'une table au hasard sans être installé : vous ne voyez ni code, ni panier, ni nom de convive.
+En Hugo, essayez d'ouvrir une table de la Terrasse : refusée, c'est le secteur de Sarah (sarah@example.test / Oliva-Sarah-Serveur-Terrasse-2026).
+Acte 11 — Les données
+Onglet admin → Sécurité & données.
+
+Historique : toutes vos actions de la journée y sont, avec leur auteur.
+Données → Exporter : vous récupérez un vrai fichier .xlsx à 44 feuilles.
+Sauvegarder : une sauvegarde manuelle apparaît dans la liste, avec sa taille.
+Connexions : les sessions ouvertes, dont celles de Hugo et Camille.
+Ce qui affichera « Non configuré », et c'est voulu : l'envoi d'e-mails, l'impression en cuisine et le paiement en ligne. Rien n'est simulé dans Oliva, donc ces trois-là annoncent leur absence au lieu de faire semblant de fonctionner.
+
+Le seul défaut connu : Léa (lea@example.test / Oliva-Lea-Cuisine-Chaude-2026) se connecte mais tombe sur « Accès refusé ». Son rôle Cuisine n'a pas d'écran. Dites-moi si je le construis.
+
+Si vous voulez cette liste comme page web à cocher au fur et à mesure pendant le test, je vous la publie en une minute.
