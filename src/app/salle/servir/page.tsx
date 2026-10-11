@@ -15,7 +15,7 @@ export default async function Page() {
       <PageHeader
         eyebrow="Service"
         title="C'est prêt, à vous de servir."
-        subtitle="Les commandes signalées prêtes par la cuisine, dans votre zone."
+        subtitle="Les commandes de vos tables : prêtes, encore en cuisine, ou déjà servies."
         actions={
           <Callout tone="olive" className="max-w-xs">Signalez une commande servie après l'avoir apportée à la table.</Callout>
         }

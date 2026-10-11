@@ -37,6 +37,7 @@ export const NAV: NavGroup[] = [
       { href: "/admin/service", label: "Service en direct", icon: "service", perm: "commandes.voir" },
       { href: "/responsable", label: "Espace responsable", icon: "compass", perm: "tables.affecter" },
       { href: "/salle", label: "Espace serveur", icon: "picnic", perm: "commandes.servir" },
+      { href: "/cuisine", label: "Écran de cuisine", icon: "chef", perm: "preparation.changer" },
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: "users", perm: "utilisateurs.gerer" },
       { href: "/admin/roles", label: "Rôles & droits", icon: "shield", perm: "utilisateurs.gerer" },
       { href: "/admin/tables", label: "Zones & tables", icon: "grid", perm: "salle.configurer" },

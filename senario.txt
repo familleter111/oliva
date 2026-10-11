@@ -1,3 +1,15 @@
+
+Adresse	Mot de passe	Rôle	Après connexion
+admin@oliva.local	Oliva-5lj_5UghHt8P	Administrateur	/admin
+camille@example.test	Oliva-Camille-Responsable-2026	Responsable de salle	/responsable
+hugo@example.test	Oliva-Hugo-Serveur-Salle-2026	Serveur, Salle principale	/salle
+sarah@example.test	Oliva-Sarah-Serveur-Terrasse-2026	Serveur, Terrasse	/salle
+lea@example.test	Oliva-Lea-Cuisine-Chaude-2026	Cuisine, station chaude	voir plus bas
+adam@example.test	Oliva-Adam-Serveur-Suspendu-2026	Serveur, Salle principale	refusé, compte suspendu
+Tout se connecte sur https://familleter111-oliva.vercel.app/admin/login, la même page pour les trois espaces : le serveur renvoie chacun chez lui.
+
+Trois précisions.
+
 Acte 1 — La carte publique · aucun compte
 Fenêtre privée, allez sur https://familleter111-oliva.vercel.app/
 

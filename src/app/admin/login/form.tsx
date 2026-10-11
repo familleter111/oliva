@@ -20,7 +20,7 @@ export function LoginForm() {
       if (res.ok && json?.ok) {
         // La destination vient du serveur : elle dépend des permissions du compte, pas du formulaire.
         const vers = json.data?.redirection ?? "";
-        window.location.assign(["/salle", "/responsable", "/admin/acces-refuse"].includes(vers) ? vers : "/admin");
+        window.location.assign(["/salle", "/responsable", "/cuisine", "/admin/acces-refuse"].includes(vers) ? vers : "/admin");
         return;
       }
       setError(json?.error?.message ?? "Connexion impossible pour le moment. Réessayez.");

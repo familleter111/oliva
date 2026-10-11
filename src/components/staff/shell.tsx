@@ -34,7 +34,7 @@ export interface StaffShellProps {
   brand: { nom: string; sousTitre: string; logo: string | null };
   politique: PasswordPolicy;
   /** Base de l'API pour le flux en direct : /api/<espace>/evenements. */
-  espace: "salle" | "responsable";
+  espace: "salle" | "responsable" | "cuisine";
   /** Intitulé affiché au-dessus de la navigation. */
   titre: string;
   racine: string;

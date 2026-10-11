@@ -8,12 +8,21 @@ import { Dishes, Hour, Notes, OrderBadge, two } from "@/components/salle/parts";
 import { Card, EmptyState, Input, buttonClass } from "@/components/ui";
 import type { SalleServe } from "@/lib/salle-types";
 
-/** Liste des commandes prêtes. Le filtrage se fait dans le navigateur sur les données déjà reçues. */
+type Onglet = "a-servir" | "en-cuisine" | "servies";
+
+/** Ce que chaque onglet dit quand il n'a rien à montrer. */
+const VIDE: Record<Onglet, { titre: string; texte: string }> = {
+  "a-servir": { titre: "Rien à servir pour le moment.", texte: "Les commandes signalées prêtes par la cuisine apparaîtront ici." },
+  "en-cuisine": { titre: "Aucune commande en cuisine.", texte: "Les commandes envoyées par vos tables apparaissent ici, et vous suivez leur avancement." },
+  servies: { titre: "Aucune commande servie.", texte: "Les commandes que vous apportez aux tables seront listées ici." },
+};
+
+/** Liste des commandes du service. Le filtrage se fait dans le navigateur sur les données déjà reçues. */
 export function ServeBoard({ data, fuseau }: { data: SalleServe; fuseau: string }) {
-  const [onglet, setOnglet] = useState<"a-servir" | "servies">("a-servir");
+  const [onglet, setOnglet] = useState<Onglet>("a-servir");
   const [q, setQ] = useState("");
 
-  const liste = onglet === "a-servir" ? data.aServir : data.servies;
+  const liste = onglet === "a-servir" ? data.aServir : onglet === "en-cuisine" ? data.enCuisine : data.servies;
   const filtre = useMemo(() => {
     const terme = q.trim().toLowerCase();
     if (!terme) return liste;
@@ -27,9 +36,10 @@ export function ServeBoard({ data, fuseau }: { data: SalleServe; fuseau: string 
           <Tabs
             label="Commandes du service"
             value={onglet}
-            onChange={(id) => setOnglet(id as "a-servir" | "servies")}
+            onChange={(id) => setOnglet(id as Onglet)}
             tabs={[
               { id: "a-servir", label: `À servir${data.aServir.length > 0 ? ` (${data.aServir.length})` : ""}` },
+              { id: "en-cuisine", label: `En cuisine${data.enCuisine.length > 0 ? ` (${data.enCuisine.length})` : ""}` },
               { id: "servies", label: "Servies" },
             ]}
           />
@@ -42,12 +52,8 @@ export function ServeBoard({ data, fuseau }: { data: SalleServe; fuseau: string 
 
       {filtre.length === 0 ? (
         <Card>
-          <EmptyState icon={<CallBell size={24} />} title={onglet === "a-servir" ? "Rien à servir pour le moment." : "Aucune commande servie."}>
-            {onglet === "a-servir"
-              ? q
-                ? "Aucune commande ne correspond à cette recherche."
-                : "Les commandes signalées prêtes par la cuisine apparaîtront ici."
-              : "Les commandes que vous apportez aux tables seront listées ici."}
+          <EmptyState icon={<CallBell size={24} />} title={VIDE[onglet].titre}>
+            {q ? "Aucune commande ne correspond à cette recherche." : VIDE[onglet].texte}
           </EmptyState>
         </Card>
       ) : (
@@ -70,9 +76,15 @@ export function ServeBoard({ data, fuseau }: { data: SalleServe; fuseau: string 
                   <span className="hidden sm:block">
                     <Hour iso={o.creeLe} fuseau={fuseau} />
                   </span>
-                  <Link href={`/salle/servir/${o.id}`} className={buttonClass("primary", "md", "ml-auto max-sm:w-full")}>
-                    {o.servie ? "Voir le détail" : "Voir et servir"} <ArrowRight size={18} />
-                  </Link>
+                  {o.prete || o.servie ? (
+                    <Link href={`/salle/servir/${o.id}`} className={buttonClass("primary", "md", "ml-auto max-sm:w-full")}>
+                      {o.servie ? "Voir le détail" : "Voir et servir"} <ArrowRight size={18} />
+                    </Link>
+                  ) : (
+                    <Link href={`/salle/tables/${o.tableId}`} className={buttonClass("secondary", "md", "ml-auto max-sm:w-full")}>
+                      Voir la table <ArrowRight size={18} />
+                    </Link>
+                  )}
                 </header>
                 <Dishes lignes={o.lignes} />
                 <div className="mt-3">

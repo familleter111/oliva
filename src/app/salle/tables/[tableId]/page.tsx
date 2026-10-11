@@ -115,7 +115,7 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
                     ) : (
                       <div className="mt-4 flex flex-col gap-2">
                         <p className="rounded-xl bg-olive-tint px-4 py-2.5 text-center text-[14.5px] text-muted">{o.servie ? "Commande servie." : `${o.statutNom}, en cuisine.`}</p>
-                        {o.suivant && (o.suivant.dernier ? droits.servir : droits.preparer) ? (
+                        {!o.suivant ? null : (o.suivant.dernier ? droits.servir : droits.preparer) ? (
                           <SalleAction
                             path={`commandes/${o.id}/statut`}
                             body={{ statut: o.suivant.id }}
@@ -124,7 +124,12 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
                             icon={<ArrowRight size={18} />}
                             className="w-full"
                           />
-                        ) : null}
+                        ) : (
+                          // Sans le droit, pas de bouton : autant dire pourquoi plutôt que de laisser l'écran muet.
+                          <p className="rounded-xl bg-warn-soft px-4 py-2.5 text-center text-[14px] leading-snug text-warn">
+                            Votre rôle ne permet pas de faire avancer cette commande. Le droit « Changer la préparation » s'accorde dans Administration, Rôles.
+                          </p>
+                        )}
                       </div>
                     )}
                   </Card>

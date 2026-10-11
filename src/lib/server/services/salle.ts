@@ -266,6 +266,7 @@ export function serveList(db: Db, auth: Auth): SalleServe {
   const miennes = db.Commandes.filter((c) => ids.has(c.sessionId));
   return {
     aServir: miennes.filter((c) => c.statut === ready).sort((a, b) => a.creeLe.localeCompare(b.creeLe)).map(order),
+    enCuisine: miennes.filter((c) => c.statut !== ready && c.statut !== last).sort((a, b) => a.creeLe.localeCompare(b.creeLe)).map(order),
     servies: miennes.filter((c) => c.statut === last).sort((a, b) => b.creeLe.localeCompare(a.creeLe)).slice(0, 20).map(order),
   };
 }

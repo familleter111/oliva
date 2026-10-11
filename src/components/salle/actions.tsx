@@ -1,10 +1,11 @@
 "use client";
 
 import { CheckCircle, CircleNotch, Printer, Receipt, Warning } from "@phosphor-icons/react/dist/ssr";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { cn, formatMoney } from "@/lib/format";
 import type { SalleBill } from "@/lib/salle-types";
 import { Modal, useAction, useApi } from "../client";
+import { StaffAction } from "../staff/action";
 import { Button, buttonClass } from "../ui";
 
 /**
@@ -15,36 +16,9 @@ import { Button, buttonClass } from "../ui";
 
 type Variante = "primary" | "secondary" | "outline";
 
-export function SalleAction({
-  path,
-  label,
-  success,
-  icon,
-  body,
-  variant = "primary",
-  size = "md",
-  className,
-  disabled,
-}: {
-  path: string;
-  label: string;
-  success: string;
-  icon?: ReactNode;
-  /** Corps de la requête, pour les actions qui portent un choix, comme l'étape visée. */
-  body?: unknown;
-  variant?: Variante;
-  size?: "sm" | "md" | "lg";
-  className?: string;
-  disabled?: boolean;
-}) {
-  const call = useApi("salle");
-  const { run, pending } = useAction();
-  return (
-    <button type="button" disabled={pending || disabled} onClick={() => void run(() => call("POST", path, body), { success })} className={buttonClass(variant, size, className)}>
-      {pending ? <CircleNotch size={18} className="animate-spin" /> : icon}
-      {label}
-    </button>
-  );
+/** Action de l'espace serveur : le bouton commun du personnel, câblé sur /api/salle. */
+export function SalleAction(props: Omit<Parameters<typeof StaffAction>[0], "espace">) {
+  return <StaffAction espace="salle" {...props} />;
 }
 
 /** Impression de l'addition : la page imprimable est celle qui est affichée, rien n'est envoyé ailleurs. */

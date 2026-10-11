@@ -102,10 +102,10 @@ export async function readJson(req: Request): Promise<unknown> {
 
 /**
  * Point d'entrée unique des API du personnel : origine, session, jeton, permission, puis validation.
- * `espace` choisit la garde : l'administration exige `admin.acces`, l'espace serveur ne l'exige pas.
+ * `garde` choisit le contrôle : l'administration exige `admin.acces`, les espaces du personnel non.
  */
-export async function handle(req: Request, segments: string[], table: Routes, espace: "admin" | "salle" = "admin"): Promise<Response> {
-  const gate = espace === "salle" ? requireStaffApi : requireApi;
+export async function handle(req: Request, segments: string[], table: Routes, garde: "admin" | "personnel" = "admin"): Promise<Response> {
+  const gate = garde === "personnel" ? requireStaffApi : requireApi;
   try {
     const method = req.method.toUpperCase();
     const mutating = method !== "GET" && method !== "HEAD";

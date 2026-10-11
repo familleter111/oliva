@@ -42,7 +42,7 @@ export const tab = {
  * Appel des API du personnel : jeton de protection ajouté, erreurs converties en messages lisibles.
  * `espace` choisit la base : « admin », « salle » pour l'espace serveur, « responsable » pour la salle.
  */
-export function useApi(espace: "admin" | "salle" | "responsable" = "admin"): Call {
+export function useApi(espace: "admin" | "salle" | "responsable" | "cuisine" = "admin"): Call {
   const csrf = useContext(CsrfContext);
   return useCallback(
     async <T,>(method: string, path: string, body?: unknown): Promise<T> => {

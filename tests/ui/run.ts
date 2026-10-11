@@ -26,7 +26,7 @@ const ENV = { ...process.env, NODE_ENV: "production", OLIVA_STORAGE_DIR: DIR, OL
 const T = 15000;
 const DIALOG = '[role="dialog"]';
 
-const PAGES = ["", "admin", "admin/etablissement", "admin/horaires", "admin/apparence", "admin/categories", "admin/produits", "admin/produits/nouveau", "admin/options", "admin/medias", "admin/utilisateurs", "admin/utilisateurs/inviter", "admin/roles", "admin/service", "admin/tables", "admin/plan", "admin/qr", "admin/commandes", "admin/commandes/statuts", "admin/notifications", "admin/addition", "admin/connexions", "admin/securite", "admin/historique", "admin/donnees", "admin/publication", "admin/apercu", "salle", "salle/servir", "salle/demandes", "salle/additions", "responsable", "responsable/plan", "responsable/equipe", "responsable/service", "responsable/demandes", "responsable/sessions"];
+const PAGES = ["", "admin", "admin/etablissement", "admin/horaires", "admin/apparence", "admin/categories", "admin/produits", "admin/produits/nouveau", "admin/options", "admin/medias", "admin/utilisateurs", "admin/utilisateurs/inviter", "admin/roles", "admin/service", "admin/tables", "admin/plan", "admin/qr", "admin/commandes", "admin/commandes/statuts", "admin/notifications", "admin/addition", "admin/connexions", "admin/securite", "admin/historique", "admin/donnees", "admin/publication", "admin/apercu", "salle", "salle/servir", "salle/demandes", "salle/additions", "cuisine", "responsable", "responsable/plan", "responsable/equipe", "responsable/service", "responsable/demandes", "responsable/sessions"];
 
 function findChrome(): string | null {
   const candidates = [
@@ -1226,6 +1226,134 @@ async function serverJourney(admin: Page, browser: Browser): Promise<void> {
 
 /* ------------------------------------ parcours de l'espace responsable */
 
+/** Parcours cuisine : une station, un compte Cuisine, et le statut qui remonte jusqu'au convive. */
+async function kitchenJourney(admin: Page, browser: Browser): Promise<void> {
+  section("Écran de cuisine : préparer, faire avancer, prévenir la salle");
+  axeSource ||= fs.readFileSync(path.join(ROOT, "node_modules/axe-core/axe.min.js"), "utf8");
+  const stamp = String(Date.now()).slice(-5);
+  const lea = `lea.${stamp}@example.test`;
+  const station = `Cuisine chaude ${stamp}`;
+  const cuisine = await newPage(await browser.createBrowserContext(), "cuisine");
+  const client = await newPage(await browser.createBrowserContext(), "convive cuisine");
+  let tableId = "";
+  let code = "";
+
+  await step(admin, "une station est créée et la carte lui est acheminée", async () => {
+    await admin.bringToFront();
+    await openAllDay(admin);
+    await go(admin, "/admin/commandes/statuts");
+    await fill(admin, "#new-stations-nom", station);
+    await click(admin, "button", "Ajouter", { exact: true });
+    await toast(admin, "Ajouté.");
+    // La liste des stations est rendue sur le serveur : on relit la page avant de choisir.
+    await go(admin, "/admin/commandes/statuts");
+    // Toutes les catégories partent vers cette station : la cuisine voit alors chaque plat.
+    const selects = await admin.$$eval('select[id^="route-"]', (es) => es.map((e) => e.id));
+    assert(selects.length > 0, "aucune catégorie à acheminer");
+    const valeur = await admin.$eval(`#${selects[0]}`, (e, nom: string) => [...(e as HTMLSelectElement).options].find((o) => o.textContent === nom)?.value ?? "", station);
+    assert(valeur, `station « ${station} » absente de l'acheminement`);
+    for (const id of selects) await admin.select(`#${id}`, valeur);
+    await click(admin, "button", "Enregistrer");
+    await toast(admin, "Acheminement enregistré.");
+  });
+
+  await step(client, "une table ouvre une session et un convive envoie une commande", async () => {
+    await admin.bringToFront();
+    await go(admin, "/admin/qr");
+    tableId = /\/table\/(tbl_[a-f0-9]+)/.exec(await admin.content())?.[1] ?? "";
+    assert(tableId, "identifiant de table introuvable");
+    await click(admin, "button", "Sessions");
+    await click(admin, "button", "Ouvrir une session");
+    await toast(admin, "Session ouverte pour");
+    await admin.waitForFunction(() => [...document.querySelectorAll("td span")].some((s) => /^\d{4}$/.test((s.textContent ?? "").trim())));
+    code = await admin.evaluate(() => ([...document.querySelectorAll("td span")].find((s) => /^\d{4}$/.test((s.textContent ?? "").trim()))?.textContent ?? "").trim());
+
+    await client.bringToFront();
+    await go(client, `/table/${tableId}`);
+    await client.type('input[aria-label="Chiffre 1 du code"]', code);
+    await fill(client, "#pseudo", "Inès");
+    await Promise.all([client.waitForNavigation({ waitUntil: "networkidle2" }), click(client, "button", "Rejoindre la table")]);
+    await client.$eval('button[aria-label="Ajouter Pizza della casa au panier"]', (e) => (e as HTMLElement).click());
+    await toast(client, "Pizza della casa ajouté au panier de la table.");
+    await go(client, `/table/${tableId}/panier`);
+    await click(client, "button", "Commander maintenant");
+    await click(client, `${DIALOG} button`, "Confirmer la commande");
+    await hasText(client, "C'est envoyé !");
+  });
+
+  await step(cuisine, "un compte Cuisine arrive sur son écran, pas sur « accès refusé »", async () => {
+    await admin.bringToFront();
+    await go(admin, "/admin/utilisateurs/inviter");
+    await fill(admin, "#prenom", "Léa");
+    await fill(admin, "#nom", "Bonnet");
+    await fill(admin, "#email", lea);
+    await admin.select("#role", "role_cuisine");
+    const sta = await admin.$eval("#station", (e, nom: string) => [...(e as HTMLSelectElement).options].find((o) => o.textContent === nom)?.value ?? "", station);
+    assert(sta, `station « ${station} » absente de la fiche membre`);
+    await admin.select("#station", sta);
+    await click(admin, "button", "Créer l'invitation");
+    await toast(admin, "Invitation créée.");
+    const lien = await value(admin, 'input[aria-label="Lien d\'invitation"]');
+
+    await cuisine.bringToFront();
+    await cuisine.goto(lien, { waitUntil: "networkidle2" });
+    await fill(cuisine, "#mdp", "Lea-Motdepasse-2026");
+    await fill(cuisine, "#mdp2", "Lea-Motdepasse-2026");
+    await click(cuisine, "button", "Accepter l'invitation");
+    await hasText(cuisine, "Votre compte est activé.");
+    await login(cuisine, lea, "Lea-Motdepasse-2026");
+    assert(cuisine.url().endsWith("/cuisine"), `URL inattendue après connexion : ${cuisine.url()}`);
+    await hasText(cuisine, "voici le travail");
+    await go(cuisine, "/admin");
+    assert(cuisine.url().endsWith("/admin/acces-refuse"), `URL inattendue : ${cuisine.url()}`);
+    await hasText(cuisine, "Aller à mon écran de cuisine");
+    await go(cuisine, "/salle");
+    assert(cuisine.url().endsWith("/admin/acces-refuse"), `la cuisine entre dans l'espace serveur : ${cuisine.url()}`);
+  });
+
+  await step(cuisine, "la cuisine voit la commande de sa station et la fait avancer", async () => {
+    await go(cuisine, "/cuisine");
+    await hasText(cuisine, "Pizza della casa");
+    await audit(cuisine, "écran de cuisine");
+    await click(cuisine, "button", "Passer à « En préparation »");
+    await toast(cuisine, "En préparation.");
+    await click(cuisine, "button", "Passer à « Prête »");
+    await toast(cuisine, "Prête.");
+    await hasText(cuisine, "Au passe, en attente du service.");
+    const texte = await cuisine.evaluate(() => (document.body.textContent ?? "").replace(/\s+/g, " "));
+    assert(!/Passer à « Servie »/.test(texte), "la cuisine propose de servir");
+  });
+
+  await step(admin, "la salle suit l'avancement de la cuisine sans ouvrir chaque table", async () => {
+    await admin.bringToFront();
+    await go(admin, "/salle/servir");
+    await hasText(admin, "Prête à servir");
+    await click(admin, "button", "En cuisine");
+    await hasText(admin, "Aucune commande en cuisine.");
+  });
+
+  await step(client, "le convive voit le statut posé par la cuisine", async () => {
+    await client.bringToFront();
+    await go(client, `/table/${tableId}/commandes`);
+    await client.waitForFunction(() => document.querySelector("article ol li[aria-current]")?.textContent === "Prête", { timeout: T });
+  });
+
+  await step(cuisine, "aucun débordement de l'écran de cuisine, du téléphone au grand écran", async () => {
+    const bad: string[] = [];
+    for (const width of [360, 768, 1280]) {
+      await cuisine.setViewport({ width, height: 860, isMobile: width < 1024, hasTouch: width < 1024 });
+      await go(cuisine, "/cuisine");
+      const over = await cuisine.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      if (over > 1) bad.push(`${width}px (${over}px)`);
+    }
+    assert(bad.length === 0, `débordements : ${bad.join(", ")}`);
+    await cuisine.setViewport({ width: 1536, height: 1024 });
+  });
+
+  await cuisine.close();
+  await client.close();
+}
+
 async function chefJourney(admin: Page, browser: Browser): Promise<void> {
   section("Espace responsable : coordonner la salle, affecter, clôturer");
   axeSource ||= fs.readFileSync(path.join(ROOT, "node_modules/axe-core/axe.min.js"), "utf8");
@@ -1246,8 +1374,8 @@ async function chefJourney(admin: Page, browser: Browser): Promise<void> {
     await audit(admin, "espace responsable, sessions de table");
     await click(admin, "button", "Ouvrir une session");
     await toast(admin, "Session ouverte pour");
-    await admin.waitForSelector('[aria-label^="Code de session"]', { visible: true });
-    code = await admin.$eval('[aria-label^="Code de session"]', (e) => (e.getAttribute("aria-label") ?? "").replace(/[^0-9]/g, ""));
+    await admin.waitForSelector("p[data-code]", { visible: true });
+    code = await admin.$eval("p[data-code]", (e) => e.getAttribute("data-code") ?? "");
     assert(/^\d{4}$/.test(code), `code de session illisible : ${code}`);
   });
 
@@ -1639,12 +1767,16 @@ async function main(): Promise<void> {
     } else if (process.env.OLIVA_UI_ONLY === "responsable") {
       await login(admin, ADMIN.email, password);
       await chefJourney(admin, browser);
+    } else if (process.env.OLIVA_UI_ONLY === "cuisine") {
+      await login(admin, ADMIN.email, password);
+      await kitchenJourney(admin, browser);
     } else {
       await walkthrough(admin, staff, visitor, context);
       await guestJourney(admin, browser);
       await mobileJourney(admin, browser);
       await serverJourney(admin, browser);
       await chefJourney(admin, browser);
+      await kitchenJourney(admin, browser);
       await accessibility(admin, visitor, context);
       await translation(admin);
       await overflow(admin);

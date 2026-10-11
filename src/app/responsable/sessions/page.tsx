@@ -118,7 +118,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ v
 
                 <h3 className="mt-5 text-[1.1rem] font-semibold text-ink">Code de la session</h3>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <p className="flex gap-2" aria-label={`Code de session : ${detail.code.split("").join(" ")}`}>
+                  <p className="flex gap-2" data-code={detail.code}>
+                    {/* Les chiffres sont séparés pour l'oeil ; la lecture vocale passe par le texte caché. */}
+                    <span className="sr-only">{`Code de session : ${detail.code.split("").join(" ")}`}</span>
                     {detail.code.split("").map((c, i) => (
                       <span key={i} aria-hidden className="num inline-grid size-12 place-items-center rounded-xl border border-line bg-paper text-[1.5rem] font-semibold text-ink">
                         {c}

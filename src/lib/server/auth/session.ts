@@ -72,13 +72,15 @@ export async function requirePage(...anyOf: PermissionCode[]): Promise<Auth> {
 }
 
 /**
- * Page d'accueil du membre connecté : l'administration pour qui y a droit, sinon l'espace serveur.
- * Un compte sans aucun des deux est renvoyé vers « accès refusé ».
+ * Page d'accueil du membre connecté : l'administration pour qui y a droit, sinon son espace de
+ * travail, du plus large au plus spécialisé. Un compte sans aucun de ces droits est renvoyé
+ * vers « accès refusé ».
  */
 export function homeFor(auth: Auth): string {
   if (auth.can("admin.acces")) return "/admin";
   if (auth.can("tables.affecter")) return "/responsable";
   if (auth.can("commandes.servir")) return "/salle";
+  if (auth.can("preparation.changer")) return "/cuisine";
   return "/admin/acces-refuse";
 }
 
@@ -220,9 +222,18 @@ export async function login(identifiant: string, motDePasse: string): Promise<{ 
   clearFailures(limits[limits.length - 1][0]);
   await openSession(user.id);
   if (!device) await rememberDevice(user.id);
-  // Chaque rôle arrive sur son espace : l'administration, ou la salle pour qui ne gère que le service.
+  // Chaque rôle arrive sur son espace : l'administration, la salle, ou la cuisine pour qui prépare.
   const droits = new Set(db.Permissions.filter((p) => p.roleId === user.roleId).map((p) => p.permission));
-  return { redirection: droits.has("admin.acces") ? "/admin" : droits.has("tables.affecter") ? "/responsable" : droits.has("commandes.servir") ? "/salle" : "/admin/acces-refuse" };
+  const vers = droits.has("admin.acces")
+    ? "/admin"
+    : droits.has("tables.affecter")
+      ? "/responsable"
+      : droits.has("commandes.servir")
+        ? "/salle"
+        : droits.has("preparation.changer")
+          ? "/cuisine"
+          : "/admin/acces-refuse";
+  return { redirection: vers };
 }
 
 export async function logout(): Promise<void> {

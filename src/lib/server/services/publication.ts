@@ -11,7 +11,7 @@ const KEEP_SNAPSHOTS = 5;
 
 /** Champs suivis en direct (hors publication) ou purement techniques : ignorés par la comparaison. */
 const IGNORED = new Set(["id", "majLe", "creeLe", "creePar", "archiveeLe", "miniature", "taille", "largeur", "hauteur", "format", "categorie"]);
-const LIVE: Partial<Record<PublishedSheet, string[]>> = { Produits: ["disponible"], Options: ["disponible"], Medias: ["nom"] };
+const LIVE: Partial<Record<PublishedSheet, string[]>> = { Produits: ["disponible"], Options: ["disponible"], Medias: ["nom"], Categories: ["stationId"] };
 /** Feuilles appliquées sans publication : les horaires suivent le service, pas la carte. */
 const DIRECT = new Set<PublishedSheet>(["Horaires", "Exceptions"]);
 

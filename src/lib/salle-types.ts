@@ -135,6 +135,8 @@ export interface SalleTableDetail {
 
 export interface SalleServe {
   aServir: SalleOrder[];
+  /** Commandes encore en cuisine : le serveur suit leur avancement sans ouvrir chaque table. */
+  enCuisine: SalleOrder[];
   servies: SalleOrder[];
 }
 

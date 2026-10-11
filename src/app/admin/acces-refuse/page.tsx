@@ -34,6 +34,11 @@ export default async function DeniedPage() {
               Aller à mon espace serveur
             </a>
           ) : null}
+          {auth.can("preparation.changer") && !auth.can("commandes.servir") && !auth.can("tables.affecter") ? (
+            <a href="/cuisine" className="press inline-flex h-10 items-center rounded-[10px] border border-line-strong bg-white px-4 text-[15px] hover:bg-olive-tint">
+              Aller à mon écran de cuisine
+            </a>
+          ) : null}
           {auth.can("admin.acces") ? (
             <a href="/admin" className="press inline-flex h-10 items-center rounded-[10px] border border-line-strong bg-white px-4 text-[15px] hover:bg-olive-tint">
               Retour à la vue d'ensemble

@@ -157,7 +157,9 @@ export function price(db: Db, line: Row<"LignesPanier">): PricedLine {
   const live = db.Produits.find((x) => x.id === line.produitId);
   const options = (snap?.Options ?? []).filter((o) => line.optionIds.includes(o.id));
   const unit = (p?.prixCentimes ?? 0) + options.reduce((n, o) => n + o.prixCentimes, 0);
-  const cat = snap?.Categories.find((c) => c.id === p?.categorieId);
+  // L'acheminement vers une station est une affaire d'organisation en cuisine, pas de carte publiée :
+  // il est pris en direct, puis figé sur la ligne au moment de l'envoi.
+  const cat = db.Categories.find((c) => c.id === p?.categorieId);
   return {
     id: line.id,
     produitId: line.produitId,
