@@ -128,9 +128,10 @@ export function tableState(db: Db, jeton: string): TableState {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 20);
 
-  const etat = openingState(snap?.Horaires ?? [], snap?.Exceptions ?? [], resto?.fuseauHoraire ?? "Europe/Paris");
+  // Horaires et fermetures sont pris en direct : un changement dans l'administration s'applique tout de suite.
+  const etat = openingState(db.Horaires, db.Exceptions, resto?.fuseauHoraire ?? "Europe/Paris");
   // La prise de commande s'arrête avant la fermeture, selon le réglage de l'écran Horaires.
-  const prise = orderingState(snap?.Horaires ?? [], snap?.Exceptions ?? [], resto?.fuseauHoraire ?? "Europe/Paris", params.arretAvantFermetureMin ?? 0);
+  const prise = orderingState(db.Horaires, db.Exceptions, resto?.fuseauHoraire ?? "Europe/Paris", params.arretAvantFermetureMin ?? 0);
   return {
     table: { id: table.id, nom: table.nom },
     devise: resto?.devise || "EUR",

@@ -7,7 +7,7 @@ import { AppError, conflit, invalide } from "../errors";
 import type { Db, OptionFigee, Row } from "../schema";
 import { readDb, transaction, type Actor } from "../storage";
 import { freezeBill } from "./bill";
-import { openingState } from "./menu";
+import { orderingState } from "./menu";
 import { publishedSnapshot } from "./publication";
 
 /**
@@ -310,10 +310,11 @@ export function confirmCart(jeton: string, idempotencyKey: string, ligneIds?: st
   const scope = `panier.confirmation:${tokenHash(jeton).slice(0, 16)}`;
   return transaction({ actor: null, idempotencyKey: `${scope}:${idempotencyKey}`, scope }, (db, tx) => {
     const { participant, session, panier } = access(db, jeton);
-    const snap = publishedSnapshot(db)?.snap;
     const resto = db.Restaurant[0];
-    const etat = openingState(snap?.Horaires ?? [], snap?.Exceptions ?? [], resto?.fuseauHoraire ?? "Europe/Paris");
-    if (etat.libelle !== "" && !etat.ouvert) throw conflit(params(db).messageHorsHoraires || "La prise de commande est fermée.");
+    // Même règle que l'écran du convive : horaires en direct, et arrêt quelques minutes avant la fermeture.
+    const reglages = params(db);
+    const prise = orderingState(db.Horaires, db.Exceptions, resto?.fuseauHoraire ?? "Europe/Paris", reglages.arretAvantFermetureMin ?? 0);
+    if (!prise.ouvert) throw conflit(`${reglages.messageHorsHoraires || "La prise de commande est fermée."}${prise.reprise ? ` Réouverture à ${prise.reprise}.` : ""}`);
 
     const all = db.LignesPanier.filter((l) => l.panierId === panier.id);
     const chosen = ligneIds ? all.filter((l) => ligneIds.includes(l.id)) : all;

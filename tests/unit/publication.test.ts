@@ -80,6 +80,24 @@ describe("publication et menu public", () => {
     await s.transaction({ actor: ACTOR }, (db) => void (db.Produits.find((p) => p.id === "prd_pizza")!.disponible = true));
   });
 
+  it("les horaires s'appliquent tout de suite, sans publication", async () => {
+    await s.transaction({ actor: ACTOR }, (db) => {
+      for (const h of db.Horaires) {
+        h.ouvert = true;
+        h.plages = [{ libelle: "Service", debut: "08:00", fin: "23:30" }];
+      }
+    });
+    assert.equal((await menu.publicMenu()).horaires.find((h) => h.jour === 1)?.plages[0]?.fin, "23:30", "le public voit les nouveaux horaires");
+    assert.equal(pub.draftChanges(await s.readDb()).length, 0, "un horaire n'est pas un changement à publier");
+    await s.transaction({ actor: ACTOR }, (db) => {
+      for (const h of db.Horaires) {
+        h.ouvert = false;
+        h.plages = [];
+      }
+    });
+    assert.equal(pub.draftChanges(await s.readDb()).length, 0);
+  });
+
   it("une publication programmée ne prend effet qu'à l'heure prévue, et peut être annulée", async () => {
     await s.transaction({ actor: ACTOR }, (db) => void (db.Produits.find((p) => p.id === "prd_pizza")!.prixCentimes = 2100));
     await assert.rejects(pub.publish(ACTOR, "programmee", new Date(Date.now() - HOUR).toISOString()), (e: { code?: string }) => e.code === "invalide");
@@ -162,6 +180,18 @@ describe("état d'ouverture", () => {
     assert.deepEqual(menu.orderingState(horaires, [], "Europe/Paris", 15, at("2026-10-06T21:30:00Z")), { ouvert: false, reprise: "" }, "après le dernier service, aucune reprise ce jour");
     assert.deepEqual(menu.orderingState(horaires, [{ id: "exc_1", date: "2026-10-06", motif: "Congés", service: "journee" }], "Europe/Paris", 15, at("2026-10-06T11:30:00Z")), { ouvert: false, reprise: "" }, "fermeture exceptionnelle");
     assert.deepEqual(menu.orderingState([], [], "Europe/Paris", 15, at("2026-10-06T11:30:00Z")), { ouvert: true, reprise: "" }, "sans horaires déclarés, rien n'est bloqué");
+  });
+
+  it("un service qui se termine après minuit reste ouvert jusqu'au bout", () => {
+    // Dimanche 11 octobre 2026 : service de 12:00 à 00:02, le lundi restant fermé.
+    const tard = [1, 2, 3, 4, 5, 6, 7].map((jour) => ({ id: `jour-${jour}`, jour, ouvert: jour === 7, plages: jour === 7 ? [{ libelle: "Service", debut: "12:00", fin: "00:02" }] : [] }));
+    assert.deepEqual(menu.openingState(tard, [], "Europe/Paris", at("2026-10-11T18:00:00Z")), { ouvert: true, libelle: "Ouvert jusqu'à 00:02" }, "dimanche 20 h");
+    assert.deepEqual(menu.openingState(tard, [], "Europe/Paris", at("2026-10-11T22:00:00Z")), { ouvert: true, libelle: "Ouvert jusqu'à 00:02" }, "lundi 00 h 00, le service de la veille continue");
+    assert.deepEqual(menu.openingState(tard, [], "Europe/Paris", at("2026-10-11T22:03:00Z")), { ouvert: false, libelle: "Fermé actuellement" }, "lundi 00 h 03, c'est terminé");
+    assert.deepEqual(menu.orderingState(tard, [], "Europe/Paris", 0, at("2026-10-11T18:00:00Z")), { ouvert: true, reprise: "" });
+    assert.deepEqual(menu.orderingState(tard, [], "Europe/Paris", 0, at("2026-10-11T22:00:00Z")), { ouvert: true, reprise: "" }, "après minuit, la commande reste possible");
+    assert.deepEqual(menu.orderingState(tard, [], "Europe/Paris", 15, at("2026-10-11T21:50:00Z")), { ouvert: false, reprise: "" }, "l'arrêt de 15 minutes s'applique à 23 h 47");
+    assert.deepEqual(menu.orderingState(tard, [], "Europe/Paris", 0, at("2026-10-11T22:03:00Z")), { ouvert: false, reprise: "" }, "lundi 00 h 03, la commande est fermée");
   });
 
   it("tient compte des fermetures exceptionnelles et des horaires non renseignés", () => {

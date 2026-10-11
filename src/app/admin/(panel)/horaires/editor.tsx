@@ -28,7 +28,7 @@ const DEFAUTS: Plage[] = [
   { libelle: "Dîner", debut: "19:00", fin: "23:00" },
 ];
 
-export function HorairesEditor({ initial, exceptions }: { initial: Etat; exceptions: Exception[] }) {
+export function HorairesEditor({ initial, exceptions, prise }: { initial: Etat; exceptions: Exception[]; prise: { ouvert: boolean; reprise: string } }) {
   const call = useApi();
   const { run, pending } = useAction();
   const { draft, setDraft, set, dirty } = useDraft(initial);
@@ -55,7 +55,7 @@ export function HorairesEditor({ initial, exceptions }: { initial: Etat; excepti
 
   return (
     <>
-      <PageHeader eyebrow="Horaires" title="Le bon menu, au bon moment." subtitle="Définissez les périodes pendant lesquelles les clients peuvent commander." />
+      <PageHeader eyebrow="Horaires" title="Le bon menu, au bon moment." subtitle="Définissez les périodes pendant lesquelles les clients peuvent commander. Un enregistrement s'applique aussitôt, sans republier la carte." />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
         <Card className="p-5 sm:p-6">
           <h2 className="text-[1.4rem] font-semibold">Horaires d'ouverture</h2>
@@ -104,7 +104,10 @@ export function HorairesEditor({ initial, exceptions }: { initial: Etat; excepti
 
         <Card className="flex flex-col gap-4 bg-olive-soft/50 p-5 sm:p-6">
           <h2 className="text-[1.4rem] font-semibold">Prise de commande</h2>
-          <Field label="Arrêter les commandes avant la fermeture" htmlFor="arret">
+          <p className={`rounded-xl px-4 py-2.5 text-[15px] ${prise.ouvert ? "bg-olive-soft text-olive-deep" : "bg-warn-soft text-warn"}`}>
+            {prise.ouvert ? "En ce moment, les clients peuvent commander." : prise.reprise ? `En ce moment, les clients ne peuvent pas commander. Reprise à ${prise.reprise}.` : "En ce moment, les clients ne peuvent pas commander."}
+          </p>
+          <Field label="Arrêter les commandes avant la fermeture" htmlFor="arret" help="Décompté sur la fin de chaque plage. Une plage qui se termine après minuit reste ouverte jusqu'au bout.">
             <Select id="arret" value={String(draft.arretAvantFermetureMin)} onChange={(e) => set("arretAvantFermetureMin", Number(e.target.value))}>
               {[0, 10, 15, 20, 30, 45, 60].map((m) => (
                 <option key={m} value={m}>

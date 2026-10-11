@@ -106,7 +106,16 @@ async function step(page: Page, name: string, fn: () => Promise<void>): Promise<
   }
 }
 
-const go = (page: Page, url: string) => page.goto(`${BASE}${url}`, { waitUntil: "networkidle2" });
+/** Navigation. Une page qui se rafraîchit toute seule (diffusion en direct) peut annuler la demande : on réessaie une fois. */
+const go = async (page: Page, url: string) => {
+  try {
+    return await page.goto(`${BASE}${url}`, { waitUntil: "networkidle2" });
+  } catch (e) {
+    if (!/ERR_ABORTED/.test(String(e))) throw e;
+    await sleep(500);
+    return await page.goto(`${BASE}${url}`, { waitUntil: "networkidle2" });
+  }
+};
 
 /** Élément visible et actif, trouvé par balise et texte. */
 async function find(page: Page, tag: string, text: string, opts: { exact?: boolean; root?: string } = {}): Promise<ElementHandle<Element>> {
@@ -665,7 +674,7 @@ async function guestJourney(admin: Page, browser: Browser): Promise<void> {
   await lina.setViewport({ width: 1536, height: 1024 });
   const base = () => `/table/${tableId}`;
 
-  await step(admin, "le restaurant ouvre toute la journée et publie ses horaires", async () => {
+  await step(admin, "le restaurant ouvre toute la journée, sans publication", async () => {
     await openAllDay(admin);
   });
   await step(admin, "le personnel ouvre une session et obtient le code de la table", async () => {
@@ -1385,8 +1394,16 @@ declare const axe: { run: (context: Document, options: unknown) => Promise<{ vio
 let axeSource = "";
 let audited = 0;
 
+/** Les notifications entrent et sortent en fondu : les mesurer à mi-chemin donnerait une couleur mélangée. */
+async function toastsSettled(page: Page): Promise<void> {
+  await page
+    .waitForFunction(() => [...document.querySelectorAll("[data-sonner-toast]")].every((t) => t.getAttribute("data-removed") !== "true" && Number(getComputedStyle(t).opacity) === 1), { timeout: 8000, polling: 100 })
+    .catch(() => undefined);
+}
+
 async function audit(page: Page, name: string): Promise<void> {
   await sleep(600);
+  await toastsSettled(page);
   await page.evaluate(axeSource);
   const violations = (await page.evaluate(() => axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] } }))).violations;
   audited++;

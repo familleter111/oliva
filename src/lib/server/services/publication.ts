@@ -12,6 +12,8 @@ const KEEP_SNAPSHOTS = 5;
 /** Champs suivis en direct (hors publication) ou purement techniques : ignorés par la comparaison. */
 const IGNORED = new Set(["id", "majLe", "creeLe", "creePar", "archiveeLe", "miniature", "taille", "largeur", "hauteur", "format", "categorie"]);
 const LIVE: Partial<Record<PublishedSheet, string[]>> = { Produits: ["disponible"], Options: ["disponible"], Medias: ["nom"] };
+/** Feuilles appliquées sans publication : les horaires suivent le service, pas la carte. */
+const DIRECT = new Set<PublishedSheet>(["Horaires", "Exceptions"]);
 
 const IMPACT: Partial<Record<PublishedSheet, string>> = {
   Produits: "Menu client. S'applique aux prochains ajouts au panier.",
@@ -21,8 +23,6 @@ const IMPACT: Partial<Record<PublishedSheet, string>> = {
   Medias: "Menu client. Affichage des photos.",
   Restaurant: "Menu client. Identité affichée.",
   Apparence: "Menu client. Couleurs et textes d'accueil.",
-  Horaires: "Menu client. Périodes de prise de commande.",
-  Exceptions: "Menu client. Périodes de prise de commande.",
   Tables: "Salle. S'applique aux prochaines sessions.",
   Zones: "Salle. S'applique aux prochaines sessions.",
   ReglesNotifications: "Personnel. Alertes de l'équipe.",
@@ -127,6 +127,7 @@ export function draftChanges(db: Db): ChangementResume[] {
   const out: ChangementResume[] = [];
 
   for (const sheet of PUBLISHED_SHEETS) {
+    if (DIRECT.has(sheet)) continue;
     const now = rowsOf(db, sheet);
     const was = ((snap as unknown as Record<string, AnyRow[]> | null)?.[sheet] ?? []) as AnyRow[];
     const entite = SHEET_LABEL[sheet];

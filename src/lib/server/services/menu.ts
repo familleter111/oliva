@@ -70,28 +70,56 @@ const toMin = (hhmm: string) => {
   return h * 60 + (m || 0);
 };
 
+const DAY = 24 * 60;
+const veilleJour = (jour: number) => (jour === 1 ? 7 : jour - 1);
+const veilleDate = (date: string) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
+function plagesDuJour(horaires: Row<"Horaires">[], exceptions: Row<"Exceptions">[], jour: number, date: string): Plage[] {
+  if (exceptions.some((e) => e.date === date)) return [];
+  const h = horaires.find((x) => x.jour === jour);
+  return h?.ouvert ? (h.plages ?? []) : [];
+}
+
+/**
+ * Créneaux applicables à la journée en cours, en minutes depuis minuit.
+ * Un service qui se termine après minuit (12:00 à 00:30) compte jusqu'au bout : il est
+ * repris le lendemain avec un début négatif, sinon la fin de soirée serait vue comme fermée.
+ */
+function creneaux(horaires: Row<"Horaires">[], exceptions: Row<"Exceptions">[], jour: number, date: string) {
+  const out: { debut: string; fin: string; debutMin: number; finMin: number }[] = [];
+  for (const p of plagesDuJour(horaires, exceptions, veilleJour(jour), veilleDate(date))) {
+    const debutMin = toMin(p.debut);
+    const finMin = toMin(p.fin);
+    if (finMin <= debutMin) out.push({ debut: p.debut, fin: p.fin, debutMin: debutMin - DAY, finMin });
+  }
+  for (const p of plagesDuJour(horaires, exceptions, jour, date)) {
+    const debutMin = toMin(p.debut);
+    const finMin = toMin(p.fin);
+    out.push({ debut: p.debut, fin: p.fin, debutMin, finMin: finMin <= debutMin ? finMin + DAY : finMin });
+  }
+  return out.sort((a, b) => a.debutMin - b.debutMin);
+}
+
 /** État d'ouverture calculé dans le fuseau du restaurant. */
 export function openingState(horaires: Row<"Horaires">[], exceptions: Row<"Exceptions">[], timeZone: string, at = new Date()): { ouvert: boolean; libelle: string } {
   if (!horaires.some((h) => h.ouvert && h.plages.length > 0)) return { ouvert: false, libelle: "" };
   const { jour, minutes, date } = localParts(timeZone || "Europe/Paris", at);
-  const closedToday = exceptions.some((e) => e.date === date);
-  const today = horaires.find((h) => h.jour === jour);
-  const plages = !closedToday && today?.ouvert ? [...today.plages].sort((a, b) => toMin(a.debut) - toMin(b.debut)) : [];
-  for (const p of plages) {
-    const start = toMin(p.debut);
-    let end = toMin(p.fin);
-    if (end <= start) end += 24 * 60;
-    if (minutes >= start && minutes < end) return { ouvert: true, libelle: `Ouvert jusqu'à ${p.fin}` };
-  }
-  const next = plages.find((p) => toMin(p.debut) > minutes);
-  if (next) return { ouvert: false, libelle: `Fermé, ouvre à ${next.debut}` };
-  return { ouvert: false, libelle: closedToday ? "Fermeture exceptionnelle aujourd'hui" : "Fermé actuellement" };
+  const liste = creneaux(horaires, exceptions, jour, date);
+  for (const p of liste) if (minutes >= p.debutMin && minutes < p.finMin) return { ouvert: true, libelle: `Ouvert jusqu'à ${p.fin}` };
+  const suivant = liste.find((p) => p.debutMin > minutes);
+  if (suivant) return { ouvert: false, libelle: `Fermé, ouvre à ${suivant.debut}` };
+  const ferme = exceptions.some((e) => e.date === date);
+  return { ouvert: false, libelle: ferme ? "Fermeture exceptionnelle aujourd'hui" : "Fermé actuellement" };
 }
 
 /**
  * Prise de commande : ouverte pendant le service, puis arrêtée quelques minutes avant la fermeture,
  * pour laisser à la cuisine le temps de terminer. Sans aucun horaire déclaré, rien n'est bloqué.
- * `reprise` donne l'heure du prochain créneau du jour, vide s'il n'y en a plus.
+ * `reprise` donne l'heure du prochain créneau, vide s'il n'y en a plus aujourd'hui.
  */
 export function orderingState(
   horaires: Row<"Horaires">[],
@@ -102,17 +130,10 @@ export function orderingState(
 ): { ouvert: boolean; reprise: string } {
   if (!horaires.some((h) => h.ouvert && h.plages.length > 0)) return { ouvert: true, reprise: "" };
   const { jour, minutes, date } = localParts(timeZone || "Europe/Paris", at);
-  const closedToday = exceptions.some((e) => e.date === date);
-  const today = horaires.find((h) => h.jour === jour);
-  const plages = !closedToday && today?.ouvert ? [...today.plages].sort((a, b) => toMin(a.debut) - toMin(b.debut)) : [];
+  const liste = creneaux(horaires, exceptions, jour, date);
   const marge = Math.max(0, arretMin);
-  for (const p of plages) {
-    const start = toMin(p.debut);
-    let end = toMin(p.fin);
-    if (end <= start) end += 24 * 60;
-    if (minutes >= start && minutes < end - marge) return { ouvert: true, reprise: "" };
-  }
-  return { ouvert: false, reprise: plages.find((p) => toMin(p.debut) > minutes)?.debut ?? "" };
+  for (const p of liste) if (minutes >= p.debutMin && minutes < p.finMin - marge) return { ouvert: true, reprise: "" };
+  return { ouvert: false, reprise: liste.find((p) => p.debutMin > minutes)?.debut ?? "" };
 }
 
 function assemble(snap: Snapshot, live: Db, mediaBase: string, lang: string, publie: boolean): MenuData {
@@ -198,9 +219,10 @@ function assemble(snap: Snapshot, live: Db, mediaBase: string, lang: string, pub
     langue,
     langues: langues.map((l) => ({ id: l.id, nom: l.nom })),
     categories,
-    horaires: [...snap.Horaires].sort((a, b) => a.jour - b.jour).map((h) => ({ jour: h.jour, ouvert: h.ouvert, plages: h.plages ?? [] })),
-    fermetures: snap.Exceptions.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5).map((e) => ({ date: e.date, motif: e.motif })),
-    etat: openingState(snap.Horaires, snap.Exceptions, resto?.fuseauHoraire ?? "Europe/Paris"),
+    // Les horaires s'appliquent en direct : fermer plus tôt ce soir ne demande pas de republier la carte.
+    horaires: [...live.Horaires].sort((a, b) => a.jour - b.jour).map((h) => ({ jour: h.jour, ouvert: h.ouvert, plages: h.plages ?? [] })),
+    fermetures: live.Exceptions.filter((e) => e.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5).map((e) => ({ date: e.date, motif: e.motif })),
+    etat: openingState(live.Horaires, live.Exceptions, resto?.fuseauHoraire ?? "Europe/Paris"),
   };
 }
 
@@ -210,7 +232,7 @@ export async function publicMenu(lang = ""): Promise<MenuData> {
   const published = publishedSnapshot(db);
   if (!published) {
     const empty = buildSnapshot(db);
-    return assemble({ ...empty, Categories: [], Produits: [], Medias: [], Horaires: [], Exceptions: [] }, db, "/media", lang, false);
+    return assemble({ ...empty, Categories: [], Produits: [], Medias: [] }, db, "/media", lang, false);
   }
   return assemble(published.snap, db, "/media", lang, true);
 }
