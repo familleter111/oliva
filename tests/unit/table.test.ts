@@ -52,7 +52,7 @@ describe("parcours client d'une table", () => {
     const gate = table.tableGate(db0, tableId, undefined);
     assert.ok(gate?.sessionOuverte);
     assert.ok(!JSON.stringify(gate).includes(sessionCode));
-    assert.deepEqual(Object.keys(gate!).sort(), ["banniere", "demande", "enAttente", "politique", "pseudo", "qrPerime", "restaurant", "sessionOuverte", "table", "termine"]);
+    assert.deepEqual(Object.keys(gate!).sort(), ["banniere", "demande", "enAttente", "politique", "prenom", "pseudo", "qrPerime", "restaurant", "sessionOuverte", "table", "termine"]);
     assert.equal(table.tableGate(await s.readDb(), "tbl_inconnue", undefined), null);
     assert.equal(table.admitted(await s.readDb(), tableId, "jeton-invente-jeton-invente-jeton"), false);
     assert.throws(() => table.tableState(db0, "jeton-invente-jeton-invente-jeton"), (e) => code(e) === "interdit");

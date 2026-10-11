@@ -1,7 +1,7 @@
 import "server-only";
 import { introuvable } from "../../errors";
 import { acceptSeat, refuseSeat, renewTableQr } from "../../services/access";
-import { deliverBill, finishRequest, markServed, scopeOf, takeRequest } from "../../services/salle";
+import { deliverBill, finishRequest, markServed, releaseTable, scopeOf, takeRequest } from "../../services/salle";
 import { readDb } from "../../storage";
 import type { Ctx, Routes } from "../core";
 import { serviceStream } from "../stream";
@@ -41,6 +41,8 @@ export const serveurRoutes: Routes = {
       return refuseSeat(c.actor, c.params.id);
     },
   },
+  /** Libérer la table : la session se ferme, les accès des convives sont révoqués. */
+  "POST sessions/:id/fermer": { perm: "commandes.servir", run: (c) => releaseTable(c.auth, c.params.id) },
   "POST tables/:id/qr": {
     perm: "commandes.servir",
     run: async (c) => {

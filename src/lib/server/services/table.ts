@@ -61,6 +61,7 @@ export function tableGate(db: Db, tableId: string, jeton: string | undefined, qr
     pseudo: !params?.pseudoActif ? "aucun" : params.pseudoMode === "obligatoire" ? "obligatoire" : "optionnel",
     enAttente: participant?.statut === "en_attente",
     demande: demande?.statut === "en_attente" ? "en_attente" : demande?.statut === "refusee" ? "refusee" : "aucune",
+    prenom: demande?.pseudo ?? "",
     qrPerime: !qrAccepte(table, qr),
     termine,
     banniere: banniere ? `/media/${banniere.fichier}` : null,

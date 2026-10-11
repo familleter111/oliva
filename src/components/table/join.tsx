@@ -112,7 +112,7 @@ function Replaced({ gate }: { gate: TableGate }) {
 export function JoinScreen({ gate }: { gate: TableGate }) {
   const router = useRouter();
   const [code, setCode] = useState<string[]>(() => Array<string>(DIGITS).fill(""));
-  const [pseudo, setPseudo] = useState("");
+  const [pseudo, setPseudo] = useState(gate.prenom);
   const [error, setError] = useState<{ message: string; code: boolean } | null>(null);
   const [pending, setPending] = useState(false);
   const [rejoin, setRejoin] = useState(false);
@@ -208,6 +208,33 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
       if (refused) inputs.current[0]?.select();
     }
   };
+
+  const champsCode = (
+    <div className="mt-3 flex justify-center gap-2.5 sm:gap-3">
+      {code.map((d, i) => (
+        <input
+          key={i}
+          ref={(el) => {
+            inputs.current[i] = el;
+          }}
+          value={d}
+          onChange={(e) => setDigit(i, e.target.value)}
+          onFocus={(e) => e.target.select()}
+          // Un clic de souris replace le curseur après la sélection du focus :
+          // on resélectionne pour que le chiffre tapé remplace celui qui est affiché.
+          onClick={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => onKey(i, e)}
+          onPaste={onPaste}
+          inputMode="numeric"
+          autoComplete={i === 0 ? "one-time-code" : "off"}
+          maxLength={DIGITS}
+          aria-label={`Chiffre ${i + 1} du code`}
+          aria-invalid={!!error?.code}
+          className={cn("num h-[72px] w-[64px] rounded-2xl border bg-white text-center font-sans text-[2.2rem] font-medium text-ink sm:h-[76px] sm:w-[72px]", error?.code ? "border-warn/70 bg-warn-soft" : "border-line-strong")}
+        />
+      ))}
+    </div>
+  );
 
   if (gate.qrPerime) return <Replaced gate={gate} />;
   if (gate.termine && !rejoin && !attente) return <Ended gate={gate} onRejoin={() => setRejoin(true)} />;
@@ -306,30 +333,7 @@ export function JoinScreen({ gate }: { gate: TableGate }) {
                       <span className="lg:hidden">Code de votre table</span>
                       <span className="hidden lg:inline">Code communiqué par le personnel</span>
                     </legend>
-                    <div className="mt-3 flex justify-center gap-2.5 sm:gap-3">
-                      {code.map((d, i) => (
-                        <input
-                          key={i}
-                          ref={(el) => {
-                            inputs.current[i] = el;
-                          }}
-                          value={d}
-                          onChange={(e) => setDigit(i, e.target.value)}
-                          onFocus={(e) => e.target.select()}
-                          // Un clic de souris replace le curseur après la sélection du focus :
-                          // on resélectionne pour que le chiffre tapé remplace celui qui est affiché.
-                          onClick={(e) => e.currentTarget.select()}
-                          onKeyDown={(e) => onKey(i, e)}
-                          onPaste={onPaste}
-                          inputMode="numeric"
-                          autoComplete={i === 0 ? "one-time-code" : "off"}
-                          maxLength={DIGITS}
-                          aria-label={`Chiffre ${i + 1} du code`}
-                          aria-invalid={!!error?.code}
-                          className={cn("num h-[72px] w-[64px] rounded-2xl border bg-white text-center font-sans text-[2.2rem] font-medium text-ink sm:h-[76px] sm:w-[72px]", error?.code ? "border-warn/70 bg-warn-soft" : "border-line-strong")}
-                        />
-                      ))}
-                    </div>
+                    {champsCode}
                     {!error ? <p className="mt-3 text-[1.02rem] text-muted lg:hidden">Demandez le code de la session au serveur.</p> : null}
                   </fieldset>
                 ) : (

@@ -2661,5 +2661,9 @@
  "Servir": "Serve",
  "Apporter": "Bring",
  "absolute -top-#.# -right-#.# min-w-[#px] px-# text-[#px]": "",
- "Réouverture à {}.": "Reopening at {}."
+ "Réouverture à {}.": "Reopening at {}.",
+ "La table est partie ?": "Has the table left?",
+ "Fermez la session pour libérer la table et révoquer les accès des convives.": "Close the session to free the table and revoke the guests' access.",
+ "Libérer la table": "Free the table",
+ "Votre rôle ne permet pas de libérer une table.": "Your role does not allow freeing a table."
 }

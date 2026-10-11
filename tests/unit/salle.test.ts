@@ -187,6 +187,23 @@ describe("espace serveur", () => {
     await assert.rejects(() => salle.deliverBill(hugo, sessionId), (e) => code(e) === "conflit");
   });
 
+  it("un serveur libère sa table, jamais celle d'un autre", async () => {
+    const autre = await cart.openTableSession(ACTOR, t9);
+    const lina = (await cart.joinSession(t9, autre.code, "Lina")).jeton;
+    assert.equal(table.admitted(await s.readDb(), t9, lina), true);
+
+    // Hugo connaît l'identifiant de la session de Sarah : il ne libère pas sa table pour autant.
+    await assert.rejects(() => salle.releaseTable(hugo, autre.id), (e) => code(e) === "introuvable");
+    assert.equal((await s.readDb()).SessionsTable.find((x) => x.id === autre.id)?.statut, "ouverte");
+
+    await salle.releaseTable(sarah, autre.id);
+    const db = await s.readDb();
+    assert.equal(db.SessionsTable.find((x) => x.id === autre.id)?.statut, "fermee");
+    assert.equal(table.admitted(db, t9, lina), false, "les convives perdent l'accès");
+    assert.equal(salle.tableDetail(db, sarah, t9).sessionOuverte, false, "la table est de nouveau libre");
+    await assert.rejects(() => salle.releaseTable(sarah, autre.id), (e) => code(e) === "conflit");
+  });
+
   it("la clôture de la session fige l'addition, même si les frais de service changent ensuite", async () => {
     await cart.closeTableSession(ACTOR, sessionId);
     let db = await s.readDb();

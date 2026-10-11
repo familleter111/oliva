@@ -178,9 +178,25 @@ export function RenewCode({ sessionId, nom }: { sessionId: string; nom: string }
  * Terminer une session. La liste de contrôle reflète l'état réel : commandes servies et addition remise.
  * Le règlement se fait à la caisse, hors de l'application : rien n'est encaissé ici.
  */
-export function CloseSession({ table, pretes, enPreparation, additionRemise, className }: { table: ChefTable; pretes: number; enPreparation: number; additionRemise: boolean; className?: string }) {
+export function CloseSession({
+  table,
+  pretes,
+  enPreparation,
+  additionRemise,
+  espace = "responsable",
+  libelle = "Fermer la session",
+  className,
+}: {
+  table: { sessionId: string; nom: string; convives: number; serveur?: string };
+  pretes: number;
+  enPreparation: number;
+  additionRemise: boolean;
+  espace?: "salle" | "responsable";
+  libelle?: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const call = useApi("responsable");
+  const call = useApi(espace);
   const { run, pending } = useAction();
   const reste = pretes + enPreparation;
   const confirmer = async () => {
@@ -197,7 +213,7 @@ export function CloseSession({ table, pretes, enPreparation, additionRemise, cla
   return (
     <>
       <button type="button" className={buttonClass("primary", "lg", cn("w-full", className))} onClick={() => setOpen(true)}>
-        <Lock size={19} /> Fermer la session
+        <Lock size={19} /> {libelle}
       </button>
       {reste > 0 ? <p className="mt-2 text-center text-[14px] text-warn">{reste === 1 ? "Une commande reste à servir." : `${reste} commandes restent à servir.`}</p> : null}
       <Modal

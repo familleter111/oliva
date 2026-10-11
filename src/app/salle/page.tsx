@@ -86,17 +86,12 @@ export default async function Page() {
                           <Icon size={16} weight="fill" aria-hidden />
                           {etat.label}
                         </Badge>
-                        {t.arrivees > 0 ? (
-                          <Badge tone="danger" dot>
-                            {t.arrivees} arrivée{t.arrivees > 1 ? "s" : ""}
-                          </Badge>
-                        ) : null}
                         {t.demandes > 0 ? (
                           <Badge tone="warn" dot>
                             {t.demandes} demande{t.demandes > 1 ? "s" : ""}
                           </Badge>
                         ) : null}
-                        {t.pretes > 0 ? (
+                        {t.pretes > 0 && t.etat !== "prete" ? (
                           <Badge tone="olive" dot>
                             {t.pretes} commande{t.pretes > 1 ? "s" : ""} prête{t.pretes > 1 ? "s" : ""}
                           </Badge>
@@ -124,14 +119,14 @@ export default async function Page() {
                 const Icon = PRIORITE[p.type];
                 return (
                   <li key={p.id}>
-                    <Link href={p.href} className="press flex items-center gap-3 rounded-xl border border-line bg-white p-2.5 hover:bg-olive-tint">
+                    <Link href={p.href} className="press flex flex-wrap items-center gap-3 rounded-xl border border-line bg-white p-2.5 hover:bg-olive-tint">
                       <span className="num inline-grid size-7 shrink-0 place-items-center rounded-full bg-olive-soft text-[14px] font-semibold text-ink">{i + 1}</span>
                       {p.image ? <Thumb src={p.image} alt="" className="size-12" /> : <span className="inline-grid size-12 shrink-0 place-items-center rounded-lg bg-olive-tint text-olive-deep"><Icon size={22} aria-hidden /></span>}
-                      <span className="min-w-0 flex-1">
+                      <span className="min-w-[8rem] flex-1">
                         <span className="block text-[15.5px] font-semibold text-ink">{p.table}</span>
-                        <span className="block truncate text-[14.5px] text-muted">{p.texte}</span>
+                        <span className="block text-[14.5px] leading-snug text-muted">{p.texte}</span>
                       </span>
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-olive px-3 py-1.5 text-[14px] font-medium text-white">
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-olive px-3 py-1.5 text-[14px] font-medium text-white">
                         {p.action} <ArrowRight size={14} aria-hidden />
                       </span>
                     </Link>

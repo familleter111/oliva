@@ -113,6 +113,8 @@ export interface TableGate {
   enAttente: boolean;
   /** Demande d'accès déposée depuis cet appareil, avant toute session : « aucune » tant qu'il n'y en a pas. */
   demande: "aucune" | "en_attente" | "refusee";
+  /** Prénom annoncé lors de la demande, pour ne pas le redemander. */
+  prenom: string;
   /** Vrai quand le QR code scanné a été remplacé par le personnel. */
   qrPerime: boolean;
   /** Vrai quand cet appareil participait à une session de cette table que le personnel a clôturée. */

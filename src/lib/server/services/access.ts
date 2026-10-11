@@ -150,8 +150,8 @@ export function acceptSeat(actor: Actor, demandeId: string) {
     if (db.Participants.filter((p) => p.sessionId === session.id && p.statut !== "revoque").length >= 30) {
       throw conflit("Cette table a atteint le nombre maximal de participants.");
     }
-
-    // Le client garde le jeton reçu au moment de la demande : rien de nouveau à lui transmettre.
+    // Le client garde le jeton reçu au moment de la demande : rien de nouveau à lui transmettre,
+    // et aucun code à saisir. L'accord du personnel vaut admission.
     const participant: Row<"Participants"> = { id: tx.id("par"), sessionId: session.id, pseudo: d.pseudo, jetonHash: d.jetonHash, statut: "admis", rejointLe: tx.now };
     db.Participants.push(participant);
     d.statut = "acceptee";

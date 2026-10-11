@@ -37,9 +37,10 @@ export function openTableSession(actor: Actor, tableId: string) {
 }
 
 /** Ferme la session : accès clients révoqués, panier en cours abandonné, commandes conservées. */
-export function closeTableSession(actor: Actor, sessionId: string) {
+export function closeTableSession(actor: Actor, sessionId: string, verifier?: (db: Db, session: Row<"SessionsTable">) => void) {
   return transaction({ actor }, (db, tx) => {
     const session = must(db, "SessionsTable", sessionId);
+    verifier?.(db, session);
     if (session.statut !== "ouverte") throw conflit("Cette session est déjà fermée.");
     session.statut = "fermee";
     session.fermeeLe = tx.now;

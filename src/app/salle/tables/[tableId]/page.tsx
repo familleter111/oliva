@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { DeliverBill, SalleAction } from "@/components/salle/actions";
 import { Dishes, Guests, Hour, Money, Notes, OrderBadge, RequestBadge, RequestIcon, two } from "@/components/salle/parts";
 import { Crumb } from "@/components/salle/shell";
+import { CloseSession } from "@/components/responsable/actions";
 import { RenewQr, SeatRequests } from "@/components/staff/seats";
 import { Badge, Card, EmptyState, buttonClass } from "@/components/ui";
 import { requireStaffPage } from "@/lib/server/auth/session";
@@ -28,6 +29,9 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
   const fuseau = db.Restaurant[0]?.fuseauHoraire || "Europe/Paris";
   const { addition } = vue;
   const arrivees = pendingSeats(db, new Set([tableId]));
+  // État réel du service, pour la liste de contrôle avant de libérer la table.
+  const pretes = vue.commandes.filter((c) => c.prete).length;
+  const enPreparation = vue.commandes.filter((c) => !c.prete && !c.servie).length;
 
   return (
     <>
@@ -45,10 +49,29 @@ export default async function Page({ params }: { params: Promise<{ tableId: stri
         <Badge tone={vue.sessionOuverte ? "olive" : "neutral"} dot>
           {vue.sessionOuverte ? "Session en cours" : "Aucune session ouverte"}
         </Badge>
-        <span className="ml-auto">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
           <RenewQr tableId={tableId} espace="salle" />
         </span>
       </div>
+
+      {vue.sessionOuverte ? (
+        <section aria-labelledby="liberer-titre" className="mt-5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+          <h2 id="liberer-titre" className="text-[1.2rem] font-semibold text-ink">
+            La table est partie ?
+          </h2>
+          <p className="mt-0.5 text-[15px] text-muted">Fermez la session pour libérer la table et révoquer les accès des convives.</p>
+          <div className="mt-3 sm:max-w-xs">
+            <CloseSession
+              table={{ sessionId: vue.sessionId, nom: vue.table.nom, convives: vue.convives }}
+              pretes={pretes}
+              enPreparation={enPreparation}
+              additionRemise={addition?.statut === "remise" || addition?.statut === "cloturee"}
+              espace="salle"
+              libelle="Libérer la table"
+            />
+          </div>
+        </section>
+      ) : null}
 
       {arrivees.length > 0 ? (
         <div className="mt-5">

@@ -6,6 +6,7 @@ import { AppError, conflit, introuvable } from "../errors";
 import type { Db, Row } from "../schema";
 import { transaction } from "../storage";
 import { BILL_MOTIF, billTotals, upsertBill } from "./bill";
+import { closeTableSession } from "./cart";
 import { names, thumbs } from "./table";
 import { pendingSeats, type SeatRequest } from "./access";
 
@@ -375,6 +376,15 @@ export function finishRequest(auth: Auth, demandeId: string) {
  * L'addition a été apportée à la table. Cette action n'enregistre aucun encaissement :
  * le règlement reste traité par l'organisation du restaurant, en dehors de l'application.
  */
+/**
+ * Libère une table : le serveur déclare que les convives sont partis.
+ * Même effet qu'une clôture par le responsable, limité aux tables de son service.
+ */
+export function releaseTable(auth: Auth, sessionId: string) {
+  if (!auth.can("commandes.servir")) throw new AppError("interdit", "Votre rôle ne permet pas de libérer une table.");
+  return closeTableSession(auth.actor, sessionId, (db, session) => assertTable(scopeOf(db, auth), session.tableId));
+}
+
 export function deliverBill(auth: Auth, sessionId: string) {
   return transaction({ actor: auth.actor }, (db, tx) => {
     if (!auth.can("commandes.servir")) throw new AppError("interdit", "Votre rôle ne permet pas de remettre une addition.");
